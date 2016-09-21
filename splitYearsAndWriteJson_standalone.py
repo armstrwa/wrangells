@@ -7,9 +7,29 @@ testData = {
 	'xDist': (0,10,20,30,40,50)
 	}
 	
+aProfile = {
+	'date': 2014.1231,
+	'speed': (0.30,0.20,0.23)
+	}
+	
+anotherProfile = {
+	'date': 2014.88,
+	'speed': (0.29,0.21,0.30)
+	}
+
+
+dates = [2014.18,2014.5,2014.98]
+us = [(3, 2, 1),(1,1,1),(0,1,2)]
+
+test = {
+	'date':dates,
+	'speed':us
+	}
+
 json_str = json.dumps(testData,separators=(',',':'))
 
 test_json = json.loads(json_str)
+
 
 
 ### SCRIPT STARTING HERE
@@ -20,6 +40,8 @@ import matplotlib.pyplot as plt
 
 testJsonFn = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/vv_files/filtered/EPSG102006/L8SamplerOutput/kennCL_evenlySpace_100m_profiles_sampled_2015-12-04.json'
 
+#testJsonFn = '/Users/wiar9509/defaultJsonFn.json'
+
 with open(testJsonFn) as data_file: # open json data
 	jsonData = json.load(data_file)
 
@@ -27,6 +49,7 @@ def separateYearsInJson(jsonData,outFilename='/Users/wiar9509/defaultJsonFn.json
 	'''
 	Function that reads in Mark's L8 sampler formatted JSON data and outputs a new JSON file that has velocity profiles separated annually
 	Inputs: jsonData = Mark L8 sampler formatted JSON data. outFilename = output JSON filename with full filepath. plotToggle = 1 to show plot, 0 to skip. writeToggle = 1 to write data, 0 to skip.
+	Outputs: jsonDataOut = same as data in but now has keys for each year's velocity observations.
 	
 	William Armstrong
 	23 February 2016
@@ -44,24 +67,30 @@ def separateYearsInJson(jsonData,outFilename='/Users/wiar9509/defaultJsonFn.json
 
 	numProfiles = len(jsonData["pts"]["mid_dec_year"]) # how many profiles are there?
 
-
 	for yearNow in recordYears: # iterate over years of record
 		#print "Record year: " + str(yearNow)
 		x = jsonData["sample_pts_frontdist"] # x-coordinate
 		jsonData[str(yearNow) + 'profiles'] = None # clear for each year
 		uList = [] # clear for each year
-	
+		dateList = [] # clear for each year
+		dataList = [] # clear for each year
+		
 		for i in range(0,numProfiles): # iterate over profiles
 			midDoy = jsonData["pts"]["mid_dec_year"][i] # midpoint of correlation date
 			if int(np.floor(midDoy)) == yearNow: # true if this profile in year of interest
 				#print midDoy
 				if jsonData["profiles"][i]["mid_dec_year"] == midDoy: # this should always be true, but just checking that referencing the right file
 					uNow = jsonData["profiles"][i]["speed"]
-					uList.append(uNow) # append current velocity profile to list of other velocity profiles in this year
+				#	dateList.append(midDoy) # append current date to list
+				#	uList.append(uNow)etst # append current velocity profile to list of other velocity profiles in this year
+					dictNow = {'mid_dec_year':midDoy,'speed':uNow}
+					dataList.append(dictNow)
 				
 			if i == numProfiles-1: # true if gone through all profiles
 				#print {str(yearNow) + 'profiles':uList}
-				jsonData.update({str(yearNow) + 'profiles':uList})
+				#dataDict = { 'dates': dateList, 'speeds':uList }
+				#jsonData.update({str(yearNow) + 'profiles':uList})
+				jsonData.update({str(yearNow) + 'profiles':dataList})
 
 			
 		if yearNow == recordYears[-1] and i == numProfiles-1: # true if gone through all profiles and all years
@@ -83,7 +112,7 @@ def separateYearsInJson(jsonData,outFilename='/Users/wiar9509/defaultJsonFn.json
 							col = 'r'
 							aVal = 0.2
 				
-						plt.plot(x,jsonData[str(year) + 'profiles'][j],color=col,lw=0,marker='.',alpha=aVal)
+						plt.plot(x,jsonData[str(year) + 'profiles'][j]['speed'],color=col,lw=0,marker='.',alpha=aVal)
 	
 				y1 = plt.plot(-1,-1,color='b',lw=0,marker='.',alpha=0.75,label='2013')
 				y2 = plt.plot(-1,-1,color='c',lw=0,marker='.',alpha=0.75,label='2014')	

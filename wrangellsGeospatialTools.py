@@ -459,11 +459,13 @@ def makeMultipolygonFromBoxVertices(boxVertices,srs,shpFnOut):
 	print "Sucessfully wrote shapefile: " + str(shpFnOut)
 	
 
+def makePolylineShpFromCoords(x,y,epsgNum,shpFnOut):
+'''
 # Function uses shapely and fiona to make a polyline form coords
 # Inputs = x coordinate list, y coordinate list, epsgNum = epsg coordinate system code, schema = dict defining shapefile properties
 # Modified from Mike T answer on http://gis.stackexchange.com/questions/52705/how-to-write-shapely-geometries-to-shapefiles
 # As of 08 sep 2016 doesn't encode crs because missing fiona.crs package? Once have that, finish following  http://gis.stackexchange.com/questions/100010/writing-shapefile-with-projection-defined-crashes-fiona
-def makePolylineShpFromCoords(x,y,epsgNum,shpFnOut):
+'''
 	coordPairs = []
 	for i in range(0,len(x)):
 		coordPairs.append( (x[i],y[i]) )
@@ -637,11 +639,52 @@ def readZonalStatsOutput(zonalStatsOut):
 #	statsOut = np.array( (fids,mins,means,maxs,stds,counts) ).transpose() # stick together to write out
 	statsOut = {'fids':fids,'means':means,'mins':mins,'maxs':maxs,'stds':stds,'counts':counts}	
 	return statsOut
+
+def readVertexCoordsFromPolyline(shapefileFn):
+	'''
+	Read vertex coordinates of polyline
+	Input = polyline shapefile full filepath
+	Outout = dataOut = {'xLocal','yLocal','lat','lon','samplePtsXy','samplePtsLatLon'}
+	'''
+	with fiona.open(shapefileFn,'r') as c:
+	
+		# Initialize
+		sample_pts_local=[]
+		sample_pts_lon_lat=[]
+		xList = []
+		yList = []
+		lonList = []
+		latList = []		
+	
+		# Get coordinate reference system from original shapefile
+		original = Proj(c.crs)
+		destination = Proj(init='EPSG:4326') # dest is WGS84 = EPSG 4326
+
+		f = c[0] # open feature
+		
+		for j in f['geometry']['coordinates']:
+			x = j[0]
+			y = j[1]
+			xList.append(j[0])
+			yList.append(j[1])
+			sample_pts_local.append( (x,y) )
+			lon,lat = transform(original, destination,x,y)
+			lonList.append(lon)
+			latList.append(lat)
+			sample_pts_lon_lat.append( (lon,lat) )
+		
+		# Stick it together in a dict for storage
+		dataOut = {'xLocal':xList,'yLocal':yList,'lat':latList,'lon':lonList,'samplePtsXy':sample_pts_local,'samplePtsLatLon':sample_pts_lon_lat}
+		
+		return dataOut
+
+
 	
 def readLineCoordsFromMultiLineShp(shapefileFn,transNum):
 	'''
 	# TAKEN FROM M. FAHNESTOCK'S L8_sample_frames... code. 08 sep 2016
 	# Unfinished as of 08 sep 2016 wha
+	# 22 sep 2016 think it's finished wha
 
 	# Mark's notes	
 	# use fiona to read in points along centerline in local projection (called PS here)
@@ -823,6 +866,41 @@ def listImagesToSample(pr_list,inDir):
 
 	return all_frames
 
+
+def convertProfilesListToPointTimeseries(profile_dict):
+	'''
+	#convert from profiles on individual days to time series at each point
+	written by mark fahnestock
+	'''
+	delts_days=[]
+	indir=[]
+	infile=[]
+	start_dec_year=[]
+	mid_dec_year=[]
+	stop_dec_year=[]
+	path=[]
+	row=[]
+	series=[]
+	pt_speed=[[] for a in range(len(sample_pts_PS))]  # create a list of blank lists to append the speeds of each point into...
+	for prof in profiles:
+		delts_days.append(prof['delts_days'])
+		indir.append(prof['indir'])
+		infile.append(prof['infile'])
+		start_dec_year.append(prof['start_dec_year'])
+		mid_dec_year.append(prof['mid_dec_year'])
+		stop_dec_year.append(prof['stop_dec_year'])
+		path.append(prof['path'])
+		row.append(prof['row'])
+		series.append(prof['series'])
+		# iterate over points, append timeseries of velocity at that point
+		for indx,sp in enumerate(prof['speed']):
+			pt_speed[indx].append(sp)
+
+	# for storage
+	pts={ 'delts_days':delts_days, 'indir':indir, 'infile':infile, 'start_dec_year':start_dec_year, 'mid_dec_year':mid_dec_year,\
+			'stop_dec_year':stop_dec_year, 'path':path, 'row':row, 'series':series, 'pt_speed':pt_speed }
+
+	return pts
 
 
 

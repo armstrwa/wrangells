@@ -18,7 +18,7 @@ import numpy as np
 # import scipy as sci 
 # import csv
 import glob
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import json
 from shapely import geometry
 import fiona
@@ -28,6 +28,7 @@ from fiona.crs import from_epsg
 from gdalconst import *
 import datetime as dt
 import time
+import matplotlib.gridspec as gridspec
 
 ## --------- ##
 ## FUNCTIONS ##
@@ -110,8 +111,16 @@ def interpolateVerticesOfPolyline(lineGeom,dDist):
 		dx = np.array(dE)/nPointSeg # change in easting between interpolated points
 		dy = np.array(dN)/nPointSeg # change in easting between interpolated points
 		xSeg = clX[i-1] + np.arange(0,dE,dx) # x-coordinates for interpolated points on line
-		ySeg = clY[i-1] + np.arange(0,dN,dy) # y-coordinates for interpolated points on line	
+		ySeg = clY[i-1] + np.arange(0,dN,dy) # y-coordinates for interpolated points on line
 		
+		# This very hackish way to delete with np.arange not behaving like expected. Sometimes len(xSeg) != len(ySeg) because of last point.
+		# Seemed like this happened on the first point (i.e., i = 1). wha 26sep2016
+		if len(ySeg) > len(xSeg):
+			ySeg = np.delete(ySeg,-1)
+		elif len(xSeg) > len(ySeg):
+			xSeg = np.delete(xSeg,-1)
+			
+		#print i, len(xSeg), len(ySeg)
 		
 		if i == 1: # special treatment for first point
 			xInt = xSeg
@@ -460,12 +469,12 @@ def makeMultipolygonFromBoxVertices(boxVertices,srs,shpFnOut):
 	
 
 def makePolylineShpFromCoords(x,y,epsgNum,shpFnOut):
-'''
-# Function uses shapely and fiona to make a polyline form coords
-# Inputs = x coordinate list, y coordinate list, epsgNum = epsg coordinate system code, schema = dict defining shapefile properties
-# Modified from Mike T answer on http://gis.stackexchange.com/questions/52705/how-to-write-shapely-geometries-to-shapefiles
-# As of 08 sep 2016 doesn't encode crs because missing fiona.crs package? Once have that, finish following  http://gis.stackexchange.com/questions/100010/writing-shapefile-with-projection-defined-crashes-fiona
-'''
+	'''
+	# Function uses shapely and fiona to make a polyline form coords
+	# Inputs = x coordinate list, y coordinate list, epsgNum = epsg coordinate system code, schema = dict defining shapefile properties
+	# Modified from Mike T answer on http://gis.stackexchange.com/questions/52705/how-to-write-shapely-geometries-to-shapefiles
+	# As of 08 sep 2016 doesn't encode crs because missing fiona.crs package? Once have that, finish following  http://gis.stackexchange.com/questions/100010/writing-shapefile-with-projection-defined-crashes-fiona
+	'''
 	coordPairs = []
 	for i in range(0,len(x)):
 		coordPairs.append( (x[i],y[i]) )
@@ -817,9 +826,9 @@ def getCorrelationInfoFromFn(corrFnFullFilepath):
 	
 	# Parsing filename
 	try: # if filtered
-		image1,image2,yearDoyMedian,daysBtwn,sourceSize,targetSize,step,vType,filtStatus,corr,delcorre=filename.split('_')	
+		image1,image2,yearDoyMedian,daysBtwn,sourceSize,targetSize,step,vType,filtStatus,corr,delcorr,spatialReference=filename.split('_')	
 	except ValueError: # if not filtered
-		image1,image2,yearDoyMedian,daysBtwn,sourceSize,targetSize,step,vType=corrFn.split('_')[0:8]
+		image1,image2,yearDoyMedian,daysBtwn,sourceSize,targetSize,step,vType=corrFnFullFilepath.split('_')[0:8]
 		filtStatus = None
 		corr = None
 		delcorr = None
@@ -881,8 +890,10 @@ def convertProfilesListToPointTimeseries(profile_dict):
 	path=[]
 	row=[]
 	series=[]
-	pt_speed=[[] for a in range(len(sample_pts_PS))]  # create a list of blank lists to append the speeds of each point into...
-	for prof in profiles:
+#	pt_speed=[[] for a in range(len(sample_pts_PS))]  # create a list of blank lists to append the speeds of each point into...
+	# changed wha 26sep2016 b/c sample_pts_PS defined outside. Below line should be same length
+	pt_speed=[[] for a in range(len(profile_dict[0]['speed']))]  # create a list of blank lists to append the speeds of each point into...
+	for prof in profile_dict:
 		delts_days.append(prof['delts_days'])
 		indir.append(prof['indir'])
 		infile.append(prof['infile'])
@@ -903,6 +914,408 @@ def convertProfilesListToPointTimeseries(profile_dict):
 	return pts
 
 
+def calculateSeasonalVelocityStats(uSeason):		
+	'''
+	Function to calculate season velocity percentiles		
+	Takes in seasonal velocity (here called uSu b/c just copied from below)
+	Ouputs dataOut = (x, u10, u25, u50, u75, u90)
+	Something going wrong at 75th and 90th percentiles where just all nan. Think might have to do with treatment of nan
+	
+	Taken from old code, probably sloppy 26sep16 wha
+	'''
+	# initialize
+	season10 = None
+	season25 = None
+	season50 = None
+	season75 = None
+	season90 = None
+	
+	# identify missing data and turn to nan
+	nanInd = np.where(uSeason==-1)
+	uSeason[nanInd] = np.nan
+	
+	if len(uSeason.shape)>1:
+		xLen = uSeason.shape[1]
+	
+		for i in range(0,xLen):
+			dataInd = np.isnan(uSeason[:,i]) != True
+			colData = uSeason[dataInd,i]
+			if len(colData) == 0:
+				season10x = np.nan
+				season25x = np.nan
+				season50x = np.nan				
+				season75x = np.nan				
+				season90x = np.nan
+			else:		
+				season10x, season25x, season50x, season75x, season90x = np.percentile(colData,[10,25,50,75,90])
+	
+			if i == 0:
+				season10 = season10x
+				season25 = season25x
+				season50 = season50x						
+				season75 = season75x
+				season90 = season90x
+			else:
+				season10 = np.column_stack((season10,season10x))	
+				season25 = np.column_stack((season25,season25x))	
+				season50 = np.column_stack((season50,season50x))	
+				season75 = np.column_stack((season75,season75x))	
+				season90 = np.column_stack((season90,season90x))																		
+	else: # if not enough observations then nan
+		season10 = np.empty((1,len(uSeason)))
+		season10.fill(np.nan)
+		season25 = np.copy(season10)
+		season50 = np.copy(season10)		
+		season75 = np.copy(season10)
+		season90 = np.copy(season10)
+		
+	# Append data
+	dataOut = np.row_stack((season10,season25,season50,season75,season90))
+	
+	
+	return dataOut
+
+def getNumDataFromJson(jsonData,startSeasons=[304, 81, 121, 265]):
+	'''
+	Function that records number of observations within each season
+	Inputs: jsonData = json file with velocity data; startSeasons = [winter, spring, summer, fall] start season doy
+	Outputs: dataTogether = [x, nWinter, nSpring, nSummer, nFall]
+	# start days of each season, these based of local met data (304 = Oct 28; 81 = Mar 22; 121 = May 1; 265 = Sep 22)
+	From old script, probably bad and clunky 26sep16 wha
+	'''
+	shapefileName = jsonData['profile_shapefile']
+	#transName = shapefileName.split('_')[0]
+	transName = jsonData['transect_name']
+	x = np.array(jsonData['sample_pts_frontdist']) # distance from headwall [m]
+	profiles = jsonData['profiles'] # getting all profiles
+	numProfiles=len(profiles)
+
+	dataNumAll = np.zeros((len(x)))
+	dataNumWi = np.copy(dataNumAll)
+	dataNumSp = np.copy(dataNumAll)
+	dataNumSu = np.copy(dataNumAll)
+	dataNumFa = np.copy(dataNumAll)
+
+	for i in range(0,numProfiles):
+		profNow = profiles[i]
+		startDecYear = profNow['start_dec_year']
+		midDecYear = profNow['mid_dec_year']
+		endDecYear = profNow['stop_dec_year']
+	
+		middleDoy = (midDecYear - np.floor(midDecYear))*365.25
+	
+		u = np.array(profNow['speed'])
+		dataInd=np.where(u!=-1)
+		dataNumAll[dataInd] = dataNumAll[dataInd] + 1
+	
+		# Categorize by season
+		if int(middleDoy) >= startSeasons[0] or int(middleDoy) < startSeasons[1]:
+			seasonColor = 'c' # winter color
+			midSeason = 'winter'
+			dataNumWi[dataInd] = dataNumWi[dataInd] + 1
+		elif int(middleDoy) >= startSeasons[1] and int(middleDoy) < startSeasons[2]:
+			seasonColor = 'y' # spring color
+			midSeason = 'spring'
+			dataNumSp[dataInd] = dataNumSp[dataInd] + 1
+		elif int(middleDoy) >= startSeasons[2] and int(middleDoy) < startSeasons[3]:
+			seasonColor = 'g' # summer color
+			midSeason = 'summer'
+			dataNumSu[dataInd] = dataNumSu[dataInd] + 1
+		elif int(middleDoy) >= startSeasons[3] and int(middleDoy) < startSeasons[0]:
+			seasonColor = 'r' # fall color
+			midSeason = 'fall'
+			dataNumFa[dataInd] = dataNumFa[dataInd] + 1
+	
+	dataTogether = np.array((x,dataNumAll,dataNumWi,dataNumSp,dataNumSu,dataNumFa))
+	return dataTogether.transpose()
+
+
+def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265]):
+	'''
+	Script to read JSON velocity file, perform seasonal statistics, and plot results
+	Input: json filename to process
+	Output: data = x, nAll, uAll, nWinter, uWinter ... 
+	Old and clunky
+	'''
+
+	with open(fnIn) as data_file:
+		data = json.load(data_file)
+
+	# Read in JSON data to see how many observations at each x
+	obsNum = getNumDataFromJson(data)
+
+	shapefileName = data['profile_shapefile']
+	transName = data['transect_name']
+	x = np.array(data['sample_pts_frontdist']) # distance from headwall [m]
+	profiles = data['profiles'] # getting all profiles
+	numProfiles=len(profiles)
+
+	uMatx = np.empty(len(x))
+	uWi = []
+	uSp = []
+	uSu = []
+	uFa = []
+
+	for i in range(0,numProfiles): # iterate over profiles
+		u = np.array(profiles[i]['speed'])
+		if i == 0:
+			uMatx = u
+		else:
+			uMatx = np.column_stack((uMatx,u))
+		startDecYear = np.array(profiles[i]['start_dec_year'])
+		startYear = np.floor(startDecYear)
+		startDoy=np.round((startDecYear-startYear)*365)
+		middleDecYear = np.array(profiles[i]['mid_dec_year'])
+		middleYear = np.floor(middleDecYear)
+		middleDoy = np.round((middleDecYear-middleYear)*365)
+		endDecYear = np.array(profiles[i]['stop_dec_year'])
+		endYear = np.floor(endDecYear)
+		endDoy=np.round((endDecYear-endYear)*365)
+		daysBtwn = np.array(profiles[i]['delts_days'])
+	
+		# Plot point
+		#Start season based
+		# Identify start seasons
+
+		if int(middleDoy) >= startSeasons[0] or int(middleDoy) < startSeasons[1]:
+			seasonColor = 'c' # winter color
+			midSeason = 'winter'
+		elif int(middleDoy) >= startSeasons[1] and int(middleDoy) < startSeasons[2]:
+			seasonColor = 'y' # spring color
+			midSeason = 'spring'
+		elif int(middleDoy) >= startSeasons[2] and int(middleDoy) < startSeasons[3]:
+			seasonColor = 'g' # summer color
+			midSeason = 'summer'
+		elif int(middleDoy) >= startSeasons[3] and int(middleDoy) < startSeasons[0]:
+			seasonColor = 'r' # fall color
+			midSeason = 'fall'
+			
+		# Compiling seasonal velocity
+		if midSeason == 'winter':
+			if len(uWi) == 0:
+				uWi = u
+			else:
+				uWi = np.row_stack((uWi,u))
+		elif midSeason == 'spring':
+			if len(uSp) == 0:
+				uSp = u
+			else:
+				uSp = np.row_stack((uSp,u))				
+		elif midSeason == 'summer':
+			if len(uSu) == 0:
+				uSu = u
+			else:
+				uSu = np.row_stack((uSu,u))			
+		elif midSeason == 'fall':
+			if len(uFa) == 0:
+				uFa = u
+			else:
+				uFa = np.row_stack((uFa,u))	
+				
+
+		#ax1.plot(x/1e3,u,linewidth=0,marker='.',color=seasonColor,alpha=0.5)
+	
+	# If no correlations in that season, then nan
+	if len(uWi) == 0:
+		uWi = np.empty((1,len(x)))
+		uWiStats = np.empty((5,len(x)))
+		uWi.fill(np.nan)
+		uWiStats.fill(np.nan)
+	else: #otherwise calculate stats
+		uWiStats = calculateSeasonalVelocityStats(uWi)
+	if len(uSp) == 0:
+		uSp = np.empty((1,len(x)))
+		uSpStats = np.empty((5,len(x)))		
+		uSp.fill(np.nan)
+		uSpStats.fill(np.nan)
+	else:
+		uSpStats = calculateSeasonalVelocityStats(uSp)			
+	if len(uSu) == 0:
+		uSu = np.empty((1,len(x)))
+		uSuStats = np.empty((5,len(x)))			
+		uSu.fill(np.nan)
+		uSuStats.fill(np.nan)
+	else:
+		uSuStats = calculateSeasonalVelocityStats(uSu)		
+	if len(uFa) == 0:
+		uFa = np.empty((1,len(x)))
+		uFaStats = np.empty((5,len(x)))	
+		uFa.fill(np.nan)
+		uFaStats.fill(np.nan)
+	else:
+		uFaStats = calculateSeasonalVelocityStats(uFa)			
+							
+	uAllStats = calculateSeasonalVelocityStats(uMatx.transpose())
+
+
+
+	
+	
+	
+	if len(uWiStats.shape)<=1: # this true if not enough data to properly calculate	
+		uWiStats = np.empty((5,len(x)))
+		uWiStats[:] = np.nan
+	if len(uSpStats.shape)<=1: # this true if not enough data to properly calculate	
+		uSpStats = np.empty((5,len(x)))
+		uSpStats[:] = np.nan
+	if len(uSuStats.shape)<=1: # this true if not enough data to properly calculate	
+		uSuStats = np.empty((5,len(x)))
+		uSuStats[:] = np.nan	
+	if len(uFaStats.shape)<=1: # this true if not enough data to properly calculate	
+		uFaStats = np.empty((5,len(x)))
+		uFaStats[:] = np.nan			
+		
+	# Difference from median			
+	uWiDiff50 = uWiStats[2,:] - uAllStats[2,:]
+	uSpDiff50 = uSpStats[2,:] - uAllStats[2,:]
+	uSuDiff50 = uSuStats[2,:] - uAllStats[2,:]
+	uFaDiff50 = uFaStats[2,:] - uAllStats[2,:]				
+	
+	# Greater than 50th/75th %
+	
+	uWiGt50 = uWiDiff50 >= 0
+	uSpGt50 = uSpDiff50 >= 0
+	uSuGt50 = uSuDiff50 >= 0	
+	uFaGt50 = uFaDiff50 >= 0	
+		
+	uWiGt75 = uWiStats[2,:] >= uAllStats[3,:]
+	uSpGt75 = uSpStats[2,:] >= uAllStats[3,:]	
+	uSuGt75 = uSuStats[2,:] >= uAllStats[3,:]	
+	uFaGt75 = uFaStats[2,:] >= uAllStats[3,:]	
+	
+	# Less than 25ths
+	uWiLt25 = uWiStats[2,:] <= uAllStats[1,:]
+	uSpLt25 = uSpStats[2,:] <= uAllStats[1,:]
+	uSuLt25 = uSuStats[2,:] <= uAllStats[1,:]
+	uFaLt25 = uFaStats[2,:] <= uAllStats[1,:]
+	
+	# Filter out seasons with too little data
+	obsNumThreshold = 3
+	wiBadObsInd = np.where(obsNum[:,2]<obsNumThreshold)
+	uWi50plot = np.copy(uWiStats[2,:])
+	uWi50plot[wiBadObsInd] = np.nan
+	
+	spBadObsInd = np.where(obsNum[:,3]<obsNumThreshold)
+	uSp50plot = np.copy(uSpStats[2,:])
+	uSp50plot[spBadObsInd] = np.nan	
+	
+	suBadObsInd = np.where(obsNum[:,4]<obsNumThreshold)
+	uSu50plot = np.copy(uSuStats[2,:])
+	uSu50plot[suBadObsInd] = np.nan		
+
+	faBadObsInd = np.where(obsNum[:,5]<obsNumThreshold)
+	uFa50plot = np.copy(uFaStats[2,:])
+	uFa50plot[faBadObsInd] = np.nan		
+	
+	# Set up plot
+	gs = gridspec.GridSpec(4,1,height_ratios=[1,3,1,1])
+	ax1=plt.subplot(gs[1])
+	ax2=plt.subplot(gs[0])
+	ax3=plt.subplot(gs[3])
+	ax4=plt.subplot(gs[2])
+
+	if 0:
+		# all observations
+		ax1.plot(x/1e3,uWi.transpose(),marker='.',color='c',lw=0,alpha=0.25)
+		ax1.plot(x/1e3,uSp.transpose(),marker='.',color='y',lw=0,alpha=0.25)
+		ax1.plot(x/1e3,uSu.transpose(),marker='.',color='g',lw=0,alpha=0.25)
+		ax1.plot(x/1e3,uFa.transpose(),marker='.',color='r',lw=0,alpha=0.25)
+
+	# all season IQR and median
+	ax1.plot(x/1e3,uAllStats[1,:],lw=1,color='k')
+	ax1.plot(x/1e3,uAllStats[2,:],lw=2,color='k',label='Median: all data')	
+	ax1.plot(x/1e3,uAllStats[3,:],lw=1,color='k',label='25th-75th %: all data')
+	ax1.fill_between(x/1e3,	uAllStats[1,:],uAllStats[3,:],color='gray',alpha=0.1)
+	
+	# seasonal medians
+	if 1:
+		ax1.plot(x/1e3,uWiStats[2,:],lw=2,color='c')
+		ax1.plot(x/1e3,uSpStats[2,:],lw=2,color='y')
+		ax1.plot(x/1e3,uSuStats[2,:],lw=2,color='g')	
+		ax1.plot(x/1e3,uFaStats[2,:],lw=2,color='r')	
+	if 0:
+		ax1.plot(x/1e3,uWi50plot,lw=2,color='c')
+		ax1.plot(x/1e3,uSp50plot,lw=2,color='orange')
+		ax1.plot(x/1e3,uSu50plot,lw=2,color='g')
+		ax1.plot(x/1e3,uFa50plot,lw=2,color='y')		
+	
+	# Seasonal difference from all data median
+	ax4.plot(x/1e3,uWiDiff50,lw=2,ls='-',color='c')
+	ax4.plot(x/1e3,uSpDiff50,lw=2,ls='-',color='y')
+	ax4.plot(x/1e3,uSuDiff50,lw=2,ls='-',color='g')
+	ax4.plot(x/1e3,uFaDiff50,lw=2,ls='-',color='r')			
+	ax4.plot(x/1e3,np.zeros(len(x)),lw=1,ls='--',color='k')
+	
+	xLims4 = [-.3, .3]
+	xMax4 = xLims4[1]
+	xMin4 = xLims4[0]
+	trueLoc1 = 0.02
+	trueLoc2 = 0.04
+	trueLoc3 = 0.06
+	trueLoc4 = 0.08
+			
+	# Where seasonal velocity is gt 75th percentile
+	ax4.plot(x[uWiGt75==True]/1e3,uWiGt75[uWiGt75==True]*(xMax4 - trueLoc1),lw=0,marker='o',color='c',alpha=0.5)
+	ax4.plot(x[uSpGt75==True]/1e3,uSpGt75[uSpGt75==True]*(xMax4 - trueLoc2),lw=0,marker='o',color='y',alpha=0.5)
+	ax4.plot(x[uSuGt75==True]/1e3,uSuGt75[uSuGt75==True]*(xMax4 - trueLoc3),lw=0,marker='o',color='g',alpha=0.5)
+	ax4.plot(x[uFaGt75==True]/1e3,uFaGt75[uFaGt75==True]*(xMax4 - trueLoc4),lw=0,marker='o',color='r',alpha=0.5)		
+
+	# Where is velocity lt 25th percentile
+	ax4.plot(x[uWiLt25==True]/1e3,uWiLt25[uWiLt25==True]*(xMin4 + trueLoc1),lw=0,marker='o',color='c',alpha=0.5)
+	ax4.plot(x[uSpLt25==True]/1e3,uSpLt25[uSpLt25==True]*(xMin4 + trueLoc2),lw=0,marker='o',color='y',alpha=0.5)
+	ax4.plot(x[uSuLt25==True]/1e3,uSuLt25[uSuLt25==True]*(xMin4 + trueLoc3),lw=0,marker='o',color='g',alpha=0.5)
+	ax4.plot(x[uFaLt25==True]/1e3,uFaLt25[uFaLt25==True]*(xMin4 + trueLoc4),lw=0,marker='o',color='r',alpha=0.5)
+	
+	saveData = np.vstack((x,obsNum[:,1],uAllStats[1,:],uAllStats[2,:],uAllStats[3,:],obsNum[:,2],uWiStats[2,:],obsNum[:,3],uSpStats[2,:],obsNum[:,4],uSuStats[2,:],obsNum[:,5],uFaStats[2,:]))
+	saveDataT = saveData.transpose()
+	np.savetxt(pathOut + transName +'_velocityStats.csv',saveDataT,delimiter=',')
+			 
+						
+	## GET ELEVATION PROFILE
+	#elevData = np.genfromtxt(elevationProfileFolder + shapefileName[:-4] + '_elevationProfile.csv',delimiter=',')
+	elevData = np.genfromtxt('/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/dtm/elevationProfiles/' + transName + '_elevationProfile.csv',delimiter=',')
+		
+	
+	ax2.plot(obsNum[:,0]/1e3,obsNum[:,1],marker='.',color='k')
+	ax2.plot(obsNum[:,0]/1e3,obsNum[:,2],marker='.',color='c')
+	ax2.plot(obsNum[:,0]/1e3,obsNum[:,3],marker='.',color='y')	
+	ax2.plot(obsNum[:,0]/1e3,obsNum[:,4],marker='.',color='g')
+	ax2.plot(obsNum[:,0]/1e3,obsNum[:,5],marker='.',color='r')		
+					
+	ax3.plot(elevData[:,0]/1e3,elevData[:,1],color='gray')
+
+	ax3.set_xlabel('Distance from headwall [km]',fontsize=16)
+	ax1.set_ylabel('Velocity [m d$^{-1}$]',fontsize=16)
+	ax2.set_title(transName,fontsize=18)
+	
+	ax1.plot(-1,-1,marker='.',color='c',linewidth=0,label='Winter')
+	ax1.plot(-1,-1,marker='.',color='y',linewidth=0,label='Spring')
+	ax1.plot(-1,-1,marker='.',color='g',linewidth=0,label='Summer')
+	ax1.plot(-1,-1,marker='.',color='r',linewidth=0,label='Fall')
+
+	
+	#ax3.set_ylim([np.nanmin(elevData[:,1]),	np.nanmax(elevData[:,1])])
+	ax2.set_ylabel('# Observations',fontsize=18)
+	ax2.yaxis.set_label_position("right")
+	ax3.set_ylabel('Elevation [m]',fontsize=18)
+	#ax2.set_yticks(np.arange( round(elevData[:,1].min()/500)*500,round(elevData[:,1].max()/500)*500+500,500))
+	ax1.set_ylim([0,np.nanmin((2.5,np.nanmax(uAllStats[4,:])))])
+	ax1.set_xlim([0,x.max()/1e3])
+	ax1lims = ax1.xaxis.get_view_interval()
+	ax3.set_xlim([ax1lims[0],ax1lims[1]])
+	ax2.set_xlim([ax1lims[0],ax1lims[1]])
+	ax4.set_xlim([ax1lims[0],ax1lims[1]])
+	ax4.set_ylim(xLims4)
+	ax4.set_ylabel('Diff. from annual median',fontsize=18)
+	ax4.yaxis.set_label_position("right")
+		
+	ax1.legend(loc='best',prop={'size':6},numpoints=1)
+	plt.draw()
+	plt.savefig(pathOut + transName + '_profilePlot_wSeasonalMedian_wElevation_wDataNum_wDiffFromMean.pdf')
+	#plt.show()
+	plt.close()		
+	
+	return saveData
 
 
 

@@ -1380,7 +1380,7 @@ def makeRGBfromBands(folderPath,outName,tr = 'auto', bs=[4,3,2]):
 		print "Output filename already exists; deleting"
 		os.remove(outName)
 	
-	if os.path.isfile('tmp.tif')
+	if os.path.isfile('tmp.tif'):
 		os.remove(outName)
 	
 	# Get filenames for bands to be used for R,G,B

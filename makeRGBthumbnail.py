@@ -43,9 +43,13 @@ def makeRGBfromBands(folderPath,outName,tr = 'auto', bs=[4,3,2]):
 	print "Created file: " + outName
 
 
+# billy laptop
+#folderPath = '/Volumes/oldEthan/l8_imagery/imagery/'
+#outPath = '/Volumes/oldEthan/l8_imagery/imagery/falseColorComposite/'
 
-folderPath = '/Volumes/oldEthan/l8_imagery/imagery/'
-outPath = '/Volumes/oldEthan/l8_imagery/imagery/falseColorComposite/'
+# lab computer
+folderPath = '/Users/anderson/Desktop/ARMSTRONG/wrangells/imagery/L8/'
+outPath = '/Users/anderson/Desktop/ARMSTRONG/wrangells/imagery/falseColorComposite/'
 				
 folderList = os.listdir(folderPath)
 

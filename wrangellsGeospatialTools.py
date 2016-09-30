@@ -759,6 +759,56 @@ def getPathRowList(profGeom,wrs2Fn):
 	return pr_list
 
 
+def makePolygonShpFromCoords(x,y,crs,shpFnOut):
+	'''
+	# Function uses shapely and fiona to make a polygon form coords
+	# Inputs = x coordinate list, y coordinate list, crs = coordinate reference wkt, schema = dict defining shapefile properties
+	# Modified from Mike T answer on http://gis.stackexchange.com/questions/52705/how-to-write-shapely-geometries-to-shapefiles
+	# As of 08 sep 2016 doesn't encode crs because missing fiona.crs package? Once have that, finish following  http://gis.stackexchange.com/questions/100010/writing-shapefile-with-projection-defined-crashes-fiona
+	'''
+	coordPairs = []
+	for i in range(0,len(x)):
+		coordPairs.append( (x[i],y[i]) )
+
+	poly = geometry.Polygon(coordPairs)
+
+	# Define schema
+	schema = {
+		'geometry': 'Polygon',
+		'properties': {'id': 'int'},
+	}	
+
+	# Write a new Shapefile
+	with fiona.open(shpFnOut, 'w', 'ESRI Shapefile', schema, crs=crs) as c:
+		## If there are multiple geometries, put the "for" loop here
+		c.write({
+			'geometry': geometry.mapping(poly),
+			'properties': {'id':0},
+		})
+		
+	print "Sucessfully wrote shapefile: " + shpFnOut
+
+
+def makeRasterBoundingBoxIntoShapefile(rasterFn,shapefileOutFn):
+	'''
+	Gives bounding box but not correct way. Accounts for dark space around image.
+	'''
+	rast = rasterio.open(rasterFn)
+	crs = Proj(rast.get_crs()).srs
+	bounds = rast.bounds
+	ul = ( bounds.left, bounds.top)
+	ur = ( bounds.right, bounds.top)
+	lr = ( bounds.right, bounds.bottom)
+	ll = ( bounds.left, bounds.bottom)
+	
+	msk = rast.read_masks(1)
+	i,j = np.where(msk==255)
+	mostRight = np.where(j==np.max(j))
+	x,y = zip(ul,ur,lr,ll)
+	
+	makePolygonShpFromCoords(x,y,crs,shapefileOutFn)
+	
+	
 def doyToDate(year,doy):
 	'''
 	Simple function to turn a year & day of year into a date
@@ -1030,7 +1080,7 @@ def getNumDataFromJson(jsonData,startSeasons=[304, 81, 121, 265]):
 	return dataTogether.transpose()
 
 
-def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265]):
+def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265],axis='auto'):
 	'''
 	Script to read JSON velocity file, perform seasonal statistics, and plot results
 	Input: json filename to process
@@ -1214,7 +1264,7 @@ def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265]):
 	ax3=plt.subplot(gs[3])
 	ax4=plt.subplot(gs[2])
 
-	if 0:
+	if 1:
 		# all observations
 		ax1.plot(x/1e3,uWi.transpose(),marker='.',color='c',lw=0,alpha=0.25)
 		ax1.plot(x/1e3,uSp.transpose(),marker='.',color='y',lw=0,alpha=0.25)
@@ -1299,7 +1349,8 @@ def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265]):
 	ax2.yaxis.set_label_position("right")
 	ax3.set_ylabel('Elevation [m]',fontsize=18)
 	#ax2.set_yticks(np.arange( round(elevData[:,1].min()/500)*500,round(elevData[:,1].max()/500)*500+500,500))
-	ax1.set_ylim([0,np.nanmin((2.5,np.nanmax(uAllStats[4,:])))])
+	#ax1.set_ylim([0,np.nanmin((2.5,np.nanmax(uAllStats[4,:])))]) # auto-scaling limits
+	ax1.set_ylim([0,2])
 	ax1.set_xlim([0,x.max()/1e3])
 	ax1lims = ax1.xaxis.get_view_interval()
 	ax3.set_xlim([ax1lims[0],ax1lims[1]])
@@ -1316,6 +1367,44 @@ def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265]):
 	plt.close()		
 	
 	return saveData
+
+
+def makeRGBfromBands(folderPath,outName,tr = 'auto', bs=[4,3,2]):
+	'''
+	Make color composite from three separate bands
+	Inputs: folderPath = path containing image bands, tr = 100 100 = target resolution for 100 m pixels, bs = (4,3,2) = bands to use for R,G,B
+	Outputs: tiff at outName
+	'''
+	# Remove output files if they exist 
+	if os.path.isfile(outName):
+		print "Output filename already exists; deleting"
+		os.remove(outName)
+	
+	if os.path.isfile('tmp.tif')
+		os.remove(outName)
+	
+	# Get filenames for bands to be used for R,G,B
+	rFn = glob.glob(folderPath + '*B' + str(bs[0]) + '.TIF' or folderPath + '*B' + str(bs[0]) + '.tif')[0]
+	gFn = glob.glob(folderPath + '*B' + str(bs[1]) + '.TIF' or folderPath + '*B' + str(bs[1]) + '.tif')[0]
+	bFn = glob.glob(folderPath + '*B' + str(bs[2]) + '.TIF' or folderPath + '*B' + str(bs[2]) + '.tif')[0]
+
+	print "Red : " + rFn
+	print "Green : " + gFn
+	print "Blue : " + bFn
+	
+	if tr == 'auto': # assume output same resolution of not specified
+		mergeCommandString = "gdal_merge.py -separate -co " + '"' + 'COMPRESS=LZW' + '"' + " -o " + "'" + outName  + "'" + " " + rFn + " " + gFn + " " + bFn
+	else: # if target resolution specified
+		mergeCommandString = "gdal_merge.py -separate -co " + '"' + 'COMPRESS=LZW' + '"' + " -ps " + str(tr) + " " + str(tr) + " -o " + "'" + 'tmp.tif'  + "'" + " " + rFn + " " + gFn + " " + bFn
+	
+	# run gdal_merge.py to make multiband
+	os.system(mergeCommandString)
+	
+	# run gdal_translate to make RGB interpretation
+	translateCommandString = "gdal_translate -of 'GTiff' -co " + '"' + 'PHOTOMETRIC=RGB' + '" -scale 0 100 -a_nodata 0 tmp.tif ' + outName
+	os.system(translateCommandString)
+	
+	print "Created file: " + outName
 
 
 

@@ -57,7 +57,7 @@ shapefileEPSG = 3338 # proj doesn't know EPSG 102006?
 #rasterFn = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/AK_BA_62_17/akv2ba_S8_062_017_016_2014_043_2014_059_hp_filt_3.0_vv.tif'
 #rasterDirectory = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/test/'
 rasterDirectory = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/vv_files/filtered/EPSG102006/'
-outDirectory = '/Users/wiar9509/'
+outDirectory = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/swath/'
 jsonDataFn = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/vv_files/filtered/EPSG102006/L8SamplerOutput/kaskWB_evenlySpace_100m_profiles_sampled_2015-12-04.json'
 wrs2Fn = '/Users/wiar9509/Documents/generalScripts/fromMarkFahnestock/wrs2_descending/wrs2_descending.shp'
 
@@ -111,7 +111,7 @@ for featNum in range(0,lyr.GetFeatureCount()): # iterate over all transects
 	srs = osr.SpatialReference()
 	srs.ImportFromEPSG(shapefileEPSG) # This hard-coded to UTM 7N w/ WGS84 datum. Would be nice to have this defined based of input shapefile
 
-	wgt.makeMultipolygonFromBoxVertices(allBoxVerts,srs,transName+'_samplePolygons.shp') # Make shapefile for swath profiling
+	wgt.makeMultipolygonFromBoxVertices(allBoxVerts,srs,outDirectory + transName+'_samplePolygons.shp') # Make shapefile for swath profiling
 
 	profileCoords = wgt.readLineCoordsFromMultiLineShp(shapefileIn,featNum) # get coordinates for PRE-INTERPOLATED centerline profile
 	geomToPass = {'type':'LineString','coordinates':profileCoords['samplePtsLatLon']} # make shapely-style geometry dict
@@ -147,7 +147,7 @@ for featNum in range(0,lyr.GetFeatureCount()): # iterate over all transects
 			xyTfm = wgt.createTransformation(inf) # transformation parameters for converting raster pixels to ground coordinates
 
 			# Swath profile
-			stats=wgt.zonal_stats(transName+'_samplePolygons.shp', inf, nodata_value=-1) # swath profile along transect
+			stats=wgt.zonal_stats(outDirectory + transName+'_samplePolygons.shp', inf, nodata_value=-1) # swath profile along transect
 			statsDict = wgt.readZonalStatsOutput(stats) # read swath profile output
 		
 			profile_dict = wgt.getCorrelationInfoFromFn(inf) # strip filename for correlation parameters
@@ -174,10 +174,29 @@ for featNum in range(0,lyr.GetFeatureCount()): # iterate over all transects
 	jsonFnOut = transName + '_swathVelocitySampling_' + timeNow.strftime("%Y-%m-%d") + '.json'
 	wgt.writeJsonFile(profile_data,jsonFnOut)
 
+
+## ANALYSIS AND PLOTTING
+
+for featNum in range(0,lyr.GetFeatureCount()): # iterate over all transects
+	# just hacking these for testing - will change to loop	
+	#feat = lyr.GetFeature(59) # kaskWB if using the epsg102006 transects
+	#feat = lyr.GetFeature(19) # kaskWB if using the st elias utm7n transects
+	#feat = lyr.GetFeature(8) # nabeEB if using the wrangells utm7n transects
+	#featNum = 17 # nabeEB if using new WStE transects
+	feat = lyr.GetFeature(featNum) # get feature
+	lineGeom = feat.geometry() # get geometry of profile line
+	transName = feat.GetField(1) # transect name
+	
+	# Get json fn (assumes only one in this directory for each transect)
+	jsonFn = glob.glob(outDirectory + transName + '_swathVelocitySampling_*.json')[0]
 	# Calculate and plot seasonal data
-	uData = wgt.computeStatsAndPlot(jsonFnOut,outDirectory)
+	uData = wgt.computeStatsAndPlot(jsonFn,outDirectory)
 
-
+	# Read NDSI
+	ndsiFolder = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/imagery/ndsi/'
+	
+	
+	
 
 
 

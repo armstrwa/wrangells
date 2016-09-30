@@ -16,7 +16,13 @@ startSeasons=[304, 81, 121, 265] # start days of each season, these based of loc
 shapefileIn='/Users/wiar9509/Documents/generalScripts/swath/shapefileInputs/newWStETransects_19nov15_fromQGIS_EGPSG102006.shp'
 elevationProfileFolder = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/dtm/elevationProfiles/'
 
-def getNumDataFromJson(jsonData):
+def getNumDataFromJson(jsonData.startSeasons=[304, 81, 121, 265]):
+'''
+Function that records number of observations within each season
+Inputs: jsonData = json file with velocity data; startSeasons = [winter, spring, summer, fall] start season doy
+Outputs: dataTogether = [x, nWinter, nSpring, nSummer, nFall]
+# start days of each season, these based of local met data (304 = Oct 28; 81 = Mar 22; 121 = May 1; 265 = Sep 22)
+'''
 	shapefileName = jsonData['profile_shapefile']
 	transName = shapefileName.split('_')[0]
 	x = np.array(jsonData['sample_pts_frontdist']) # distance from headwall [m]
@@ -425,8 +431,11 @@ def computeStatsAndPlot_v2(transName):
 	if myDataToggle == 1:
 		if annualToggle == 0:
 			# <=96 day corr
-			fnIn = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/vv_files/filtered/EPSG102006/L8SamplerOutput/' + transName + '_evenlySpace_100m_profiles_sampled_2015-12-04.json'
-			pathOut = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/vv_files/filtered/EPSG102006/L8SamplerOutput/'
+			#fnIn = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/vv_files/filtered/EPSG102006/L8SamplerOutput/' + transName + '_evenlySpace_100m_profiles_sampled_2015-12-04.json'
+			transName = 'nabeEB'
+			fnIn = '/Users/wiar9509/nabeEB_swathVelocitySampling_2016-09-26.json'
+			#pathOut = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/vv_files/filtered/EPSG102006/L8SamplerOutput/'
+			pathOut = '/Users/wiar9509/'
 			titleTag = ' <= 96 d'
 		elif annualToggle == 1:
 			# annual corr
@@ -717,7 +726,7 @@ def computeStatsAndPlot_v2(transName):
 		
 	ax1.legend(loc='best',prop={'size':6},numpoints=1)
 	plt.draw()
-#	plt.savefig(pathOut + shapefileName[0:-4] + '_profilePlot_wSeasonalMedian_wElevation_wDataNum_wDiffFromMean.pdf')
+	plt.savefig(pathOut + shapefileName[0:-4] + '_profilePlot_wSeasonalMedian_wElevation_wDataNum_wDiffFromMean.pdf')
 	plt.show()
 	plt.close()		
 		

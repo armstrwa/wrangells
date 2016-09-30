@@ -31,8 +31,8 @@ def parseL8filename(l8fn):
 
 ### USER INPUTS ###
 
-folderPath='/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/band8/'
-outputDirectory='/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/'
+folderPath='/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/64_17/band8'
+outputDirectory='/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/' # want to make functionality to specify output directory, but avoiding for now -- wha 29sep16
 
 sourceChipSize = 24
 targetChipSize = 40
@@ -61,7 +61,9 @@ for master in masters:
 			delts_days=timedelta.days
 			
 			if delts_days > 0 and delts_days <= maxDaysBetween:
-				commandString = 'python wpycorr_v1.10.py ' + mShortFn + " " + sShortFn + " -vf -sf -v -imgdir " + folderPath + " -nsidc_out_names -use_hp -gfilt_sigma 3.0 -log10 -inc " + str(increment) + " -half_source_chip " + str(sourceChipSize) + " -half_target_chip " + str(targetChipSize)
+				# want to write in check to not repeat correlations that have already been done, but not doing for now -- wha 29sep16
+				#outDirName = folderPath+out_name_base+'_'+str(int(args.gfilt_sigma))+'_'+str(int(args.half_source_chip))+'_'+str(int(args.half_target_chip))+'_'+str(int(args.inc))+'/'
+				commandString = 'python wpycorr_v1.10_whaModified_092515.py ' + mShortFn + " " + sShortFn + " -vf -sf -v -imgdir " + folderPath + " -nsidc_out_names -use_hp -gfilt_sigma 3.0 -log10 -inc " + str(increment) + " -half_source_chip " + str(sourceChipSize) + " -half_target_chip " + str(targetChipSize)
 				
 				%cd $folderPath
 				os.system(commandString)

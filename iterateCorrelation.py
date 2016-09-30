@@ -31,7 +31,7 @@ def parseL8filename(l8fn):
 
 ### USER INPUTS ###
 
-folderPath='/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/64_17/band8'
+folderPath='/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/63_17/band8/'
 outputDirectory='/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/' # want to make functionality to specify output directory, but avoiding for now -- wha 29sep16
 
 sourceChipSize = 24

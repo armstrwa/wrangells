@@ -4,8 +4,8 @@
 # 15 September 2015
 # William Armstrong
 
-folderPath='/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/p062_r017/band8'
-
+#folderPath='/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/p062_r017/band8'
+folderPath='/Users/anderson/Desktop/ARMSTRONG/wrangells/imagery/L8/64_17/band8'
 #echo $folderPath
 cd $folderPath
 

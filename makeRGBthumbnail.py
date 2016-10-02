@@ -48,7 +48,7 @@ def makeRGBfromBands(folderPath,outName,tr = 'auto', bs=[4,3,2]):
 #outPath = '/Volumes/oldEthan/l8_imagery/imagery/falseColorComposite/'
 
 # lab computer
-folderPath = '/Users/anderson/Desktop/ARMSTRONG/wrangells/imagery/L8/'
+folderPath = '/Users/anderson/Desktop/tmp/'
 outPath = '/Users/anderson/Desktop/ARMSTRONG/wrangells/imagery/falseColorComposite/'
 				
 folderList = os.listdir(folderPath)

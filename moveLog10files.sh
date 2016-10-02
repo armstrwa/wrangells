@@ -4,10 +4,12 @@
 # William Armstrong
 # Original 09 July 2015 - modified 22 Sep 2015 to handle multiple correlation folders under image folders.
 
-writePath="/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/log10_files/"
-
+#writePath="/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/log10_files/"
+writePath="/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/log10/"
+#folderDirectoryWildcard=/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/p06*/
+folderDirectoryWildcard=/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/6*
 # Loop through all path/row folders in pycorr folder
-for folders in /Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/p06*/; do
+for folders in $folderDirectoryWildcard; do
 	echo "Cd to path-row folder: " $folders
 	cd $folders
 	# Loop through all correlation folders in path/row folder

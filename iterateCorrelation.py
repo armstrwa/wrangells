@@ -31,13 +31,14 @@ def parseL8filename(l8fn):
 
 ### USER INPUTS ###
 
-folderPath='/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/63_17/band8/'
+folderPath='/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/68_17/band8/'
 outputDirectory='/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/' # want to make functionality to specify output directory, but avoiding for now -- wha 29sep16
 
 sourceChipSize = 24
 targetChipSize = 40
 increment = 10
 maxDaysBetween = 400
+startDate = dt.datetime.fromordinal(dt.date(2000,12,31).toordinal())
 
 ### PROCESSING ###
 
@@ -60,7 +61,7 @@ for master in masters:
 			timedelta=dt_2-dt_1
 			delts_days=timedelta.days
 			
-			if delts_days > 0 and delts_days <= maxDaysBetween:
+			if delts_days > 0 and delts_days <= maxDaysBetween and dt_1>=startDate:
 				# want to write in check to not repeat correlations that have already been done, but not doing for now -- wha 29sep16
 				#outDirName = folderPath+out_name_base+'_'+str(int(args.gfilt_sigma))+'_'+str(int(args.half_source_chip))+'_'+str(int(args.half_target_chip))+'_'+str(int(args.inc))+'/'
 				commandString = 'python wpycorr_v1.10_whaModified_092515.py ' + mShortFn + " " + sShortFn + " -vf -sf -v -imgdir " + folderPath + " -nsidc_out_names -use_hp -gfilt_sigma 3.0 -log10 -inc " + str(increment) + " -half_source_chip " + str(sourceChipSize) + " -half_target_chip " + str(targetChipSize)

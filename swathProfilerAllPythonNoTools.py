@@ -121,7 +121,7 @@ for featNum in range(0,lyr.GetFeatureCount()): # iterate over all transects
 	xInt,yInt = wgt.interpolateVerticesOfPolyline(lineGeom,dDist) # interpolate vertices
 	try:
 		wgt.makePolylineShpFromCoords(xInt,yInt,shapefileEPSG,transName+'_swathSamplePoints.shp')
-	except IndexError:
+	except IndexError: # this bootleg way to deal with interp function not working and returning weirdly shaped objects. i.e., len(xInt) not always == len(yInt)
 		continue
 	else:
 		wgt.makePolylineShpFromCoords(xInt,yInt,shapefileEPSG,transName+'_swathSamplePoints.shp')
@@ -211,11 +211,11 @@ for featNum in range(0,lyr.GetFeatureCount()): # iterate over all transects
 	
 	# Get json fn (assumes only one in this directory for each transect)
 	try: 
-		jsonFn = glob.glob(outDirectory + transName + '_swathVelocitySampling_*.json')[0]
+		jsonFn = glob.glob(outDirectory + transName + '_swathVelocitySampling_*10-03.json')[0]
 	except IndexError: # this will be the case if file doesnt exist
 		continue
 	else:
-		jsonFn = glob.glob(outDirectory + transName + '_swathVelocitySampling_*.json')[0]
+		jsonFn = glob.glob(outDirectory + transName + '_swathVelocitySampling_*10-03.json')[0]
 		# Calculate and plot seasonal data
 		uData = wgt.computeStatsAndPlot(jsonFn,outDirectory)
 

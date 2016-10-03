@@ -114,7 +114,7 @@ def makeCorrFilepath(corrFolder,corrFn):
 ### USER DEFINED ###
 
 # list of good corelations
-corrList = '/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/select/selectCorrelationList.csv'
+corrList = '/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/select/selectWinterCorrelationList.csv'
 
 # where do all correlations sit?
 corrFolder = '/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/'
@@ -156,7 +156,7 @@ for corrName in corrNames:
 
 ### MOVE LOG10files
 if 0:
-	pathRowFolder = '068_017/'
+	pathRowFolder = '064_017/'
 	foldersInPathRow=glob.glob(corrFolder + pathRowFolder + "LC*")
 	log10folder = '/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/log10/'
 

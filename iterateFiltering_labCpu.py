@@ -38,6 +38,83 @@ import os
 import matplotlib.pyplot as plt
 from matplotlib import colors
 import glob
+import datetime as dt
+import time
+import rasterio
+
+def sinceEpoch(date): # returns seconds since epoch
+	'''
+	marks function to get seconds in a year for use in toYearFraction()
+	'''
+	return time.mktime(date.timetuple())
+
+def toYearFraction(date):
+	'''
+	Turns a datetime date object into a fractional year date (float)
+	Input: date (datetime date object)
+	Output: fractional year date (float)
+	Written by Mark Fahnestock
+	
+	from Mark:
+	########################################################
+	# following from accepted answer here: http://stackoverflow.com/questions/6451655/python-how-to-convert-datetime-dates-to-decimal-years
+	# but I import datetime package as dt, not datetime.datetime as dt, so this is modfied to reflect that
+	########################################################
+	'''
+	s = sinceEpoch
+
+	year = date.year
+	startOfThisYear = dt.datetime(year=year, month=1, day=1)
+	startOfNextYear = dt.datetime(year=year+1, month=1, day=1)
+
+	yearElapsed = s(date) - s(startOfThisYear)
+	yearDuration = s(startOfNextYear) - s(startOfThisYear)
+	fraction = yearElapsed/yearDuration
+
+	return date.year + fraction
+
+def doyToDate(year,doy):
+	'''
+	Simple function to turn a year & day of year into a date
+	Input: year = year (int), doy = doy (int)
+	Output: dateObject = date (datetime date object)
+	'''
+	dateObject = dt.date.fromordinal(dt.date(year-1,12,31).toordinal()+doy)
+	return dateObject
+
+
+def parseL8filename(l8fn):
+	'''
+	Parse Landsat 8 filename
+	Input : landsat 8 filename (str)
+	Output : data.viewkeys() = ['path','row','year','doy']
+	'''
+	path = l8fn[3:6]
+	row = l8fn[6:9]
+	year = l8fn[9:13]
+	doy = l8fn[13:16]
+	
+	return {'path':path,'row':row,'year':year,'doy':doy}
+
+
+def parseCorrFilename(corrFn):
+	'''
+	Read a correlation filename and get out pertinent details
+	Input: correlation filename (no path)
+	Output: dictionary with correlation details
+	'''
+	image1fn,image2fn,yearMidDoy,dtDays,source,target,inc,trash,trash,hp,trash = corrFn.split('_')
+	midYear,midDoy = yearMidDoy.split('-')
+	midDate = doyToDate(int(midYear),int(midDoy))
+	midYearFrac = toYearFraction(midDate)
+	image1dict = parseL8filename(image1fn)
+	image2dict = parseL8filename(image2fn)
+
+	corrDict = {'image1info':image1dict,'image2info':image2dict,'path':image1dict['path'],'row':image1dict['row'],
+				'dtDays':dtDays,'midYearFrac':midYearFrac,'sourceSize':source,'targetSize':target,'increment':inc,
+				'image1name':image1fn,'image2name':image2fn,'midYearDoy':yearMidDoy,'gaussian':hp}
+
+	return corrDict
 
 def writeGeotiff(geoImageFilepath,writeArray,outFn):
 	noDataValue = -1
@@ -165,6 +242,17 @@ for i in range(len(allFiles)):
 		vvFn = allFiles[i]
 		vvPath = os.path.join(vvIndir,vvFn)
 		
-		# Run the filter
-		velocityFilter(corrMin,delcorrMin,noDataValue,vvPath,outdir)
-	
+		# Generating output name to test for existence
+		corrInfo = parseCorrFilename(vvFn)
+		outName = corrInfo['image1name'] + '_' + corrInfo['image2name'] + '_' + corrInfo['midYearDoy'] + '_' + corrInfo['dtDays'] + '_' + \
+				  corrInfo['sourceSize'] + '_' + corrInfo['targetSize'] + '_' + corrInfo['increment'] + '_vv_filt_corr' + str(corrMin) + \
+				  "_delcorr" + str(delcorrMin) + ".tif"
+		
+		# Only filter if doesn't already exist
+		if not os.path.isfile(outdir + outName):
+			# Run the filter
+			velocityFilter(corrMin,delcorrMin,noDataValue,vvPath,outdir)
+
+
+
+

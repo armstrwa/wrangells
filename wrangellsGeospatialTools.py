@@ -93,6 +93,7 @@ def getMultipointGeometryVerticesXY(multipointGeom):
 # Fn to interpolate evenly spaced vertices on a polyline
 # As of 13 Jul 2016, these not evenly spaced, but I'm not super concerned about that right now.
 # As of 06 Sep 2016, xInt and yInt aren't the same length? yInt one longer.. Appears to be dependent on dDist. Works correctly for some..
+# 02 oct 2016, this causing problems... wha
 def interpolateVerticesOfPolyline(lineGeom,dDist):
 	# initialize/clear if exist
 	clX = []
@@ -877,8 +878,8 @@ def getCorrelationInfoFromFn(corrFnFullFilepath):
 	# Parsing filename
 	try: # if filtered
 		image1,image2,yearDoyMedian,daysBtwn,sourceSize,targetSize,step,vType,filtStatus,corr,delcorr,spatialReference=filename.split('_')	
-	except ValueError: # if not filtered
-		image1,image2,yearDoyMedian,daysBtwn,sourceSize,targetSize,step,vType=corrFnFullFilepath.split('_')[0:8]
+	except ValueError: # if not filtered, or if just wrong size..
+		image1,image2,yearDoyMedian,daysBtwn,sourceSize,targetSize,step,vType=filename.split('_')[0:8]
 		filtStatus = None
 		corr = None
 		delcorr = None
@@ -887,6 +888,10 @@ def getCorrelationInfoFromFn(corrFnFullFilepath):
 	doy1, year1 = int(parseL8filename(image1)['doy']) ,int(parseL8filename(image1)['year'])
 	doy2, year2 = int(parseL8filename(image2)['doy']) ,int(parseL8filename(image2)['year'])
 	path,row = int(parseL8filename(image1)['path']) ,int(parseL8filename(image1)['row'])			
+# 	doy1, year1 = int(wgt.parseL8filename(image1)['doy']) ,int(wgt.parseL8filename(image1)['year'])
+# 	doy2, year2 = int(wgt.parseL8filename(image2)['doy']) ,int(wgt.parseL8filename(image2)['year'])
+# 	path,row = int(wgt.parseL8filename(image1)['path']) ,int(wgt.parseL8filename(image1)['row'])			
+
 
 	dt_1=dt.datetime.fromordinal(dt.date(year1-1,12,31).toordinal()+doy1)
 	dt_2=dt.datetime.fromordinal(dt.date(year2-1,12,31).toordinal()+doy2)
@@ -896,7 +901,9 @@ def getCorrelationInfoFromFn(corrFnFullFilepath):
 	start_dec_year=toYearFraction(dt_1.date())
 	stop_dec_year=toYearFraction(dt_2.date())
 	mid_dec_year=toYearFraction(mid_dt.date())
-	
+# 	start_dec_year=wgt.toYearFraction(dt_1.date())
+# 	stop_dec_year=wgt.toYearFraction(dt_2.date())
+# 	mid_dec_year=wgt.toYearFraction(mid_dt.date())	
 
 	profile_dict={ 'delts_days':delts_days,\
 					'series':series_tag, 'start_dec_year':start_dec_year, 'stop_dec_year':stop_dec_year, 'mid_dec_year':mid_dec_year,\
@@ -1323,8 +1330,9 @@ def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265],axis='auto
 						
 	## GET ELEVATION PROFILE
 	#elevData = np.genfromtxt(elevationProfileFolder + shapefileName[:-4] + '_elevationProfile.csv',delimiter=',')
-	elevData = np.genfromtxt('/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/dtm/elevationProfiles/' + transName + '_elevationProfile.csv',delimiter=',')
-		
+	if(0):
+		elevData = np.genfromtxt('/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/dtm/elevationProfiles/' + transName + '_elevationProfile.csv',delimiter=',')
+		ax3.plot(elevData[:,0]/1e3,elevData[:,1],color='gray')		
 	
 	ax2.plot(obsNum[:,0]/1e3,obsNum[:,1],marker='.',color='k')
 	ax2.plot(obsNum[:,0]/1e3,obsNum[:,2],marker='.',color='c')
@@ -1332,7 +1340,7 @@ def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265],axis='auto
 	ax2.plot(obsNum[:,0]/1e3,obsNum[:,4],marker='.',color='g')
 	ax2.plot(obsNum[:,0]/1e3,obsNum[:,5],marker='.',color='r')		
 					
-	ax3.plot(elevData[:,0]/1e3,elevData[:,1],color='gray')
+
 
 	ax3.set_xlabel('Distance from headwall [km]',fontsize=16)
 	ax1.set_ylabel('Velocity [m d$^{-1}$]',fontsize=16)
@@ -1406,121 +1414,6 @@ def makeRGBfromBands(folderPath,outName,tr = 'auto', bs=[4,3,2]):
 	
 	print "Created file: " + outName
 
-def intToBinary(intArr,bitNum=16):
-	'''
-	Convert an MxN integer array to an MxNxB bit array
-	Inputs: intArr = integer array; bitNum = number of bits
-	Outputs: outArr = bit array, where bits are now in 3rd dimension
-	'''
-
-	try:
-		len(intArr) # this will balk if only one number
-		
-		# Get array shape
-		rows,cols = np.shape(intArr)
-
-		# Flatten array to next step doesn't balk
-		flatArr = intArr.flatten()
-
-		# Convert flattened integer array into bit array
-		# answer from http://stackoverflow.com/questions/22227595/convert-integer-to-binary-array-with-suitable-padding
-		bitArr = (((flatArr[:,None] & (1 << np.arange(bitNum)))) > 0).astype(int)
-	
-		# Reshape bitArr to be shape = [rows,cols,bitNum], so raster has original shape with bits in 3rd dimension
-		outArr = np.reshape(bitArr,(rows,cols,bitNum))
-				
-	except TypeError: # if only one number
-		outArr = "{0:b}".format(intArr)
-
-	return outArr
-
-def convertDoubleArrBitToIntArr(doubleBitArr):
-	'''
-	Takes landsat's double-bit info and converts into integer
-	Input: double bit band (shape = row by col by 2 depth)
-	Output: row by col array where: -1 = no, 0 = not determined, 1 = maybe, 2 = yes
-	'''
-	rows,cols,bits = doubleBitArr.shape
-	unknown = np.logical_and(doubleBitArr[:,:,0] == 0, doubleBitArr[:,:,1] == 0)
-	no = np.logical_and(doubleBitArr[:,:,0] == 0, doubleBitArr[:,:,1] == 1)
-	maybe = np.logical_and(doubleBitArr[:,:,0] == 1, doubleBitArr[:,:,1] == 0)	
-	yes = np.logical_and(doubleBitArr[:,:,0] == 1, doubleBitArr[:,:,1] == 1)
-	
-	intArrOut = np.zeros((rows,cols))
-	intArrOut[no] = -1
-	intArrOut[maybe] = 1
-	intArrOut[yes] = 2
-	
-	return intArrOut
-			
-def binaryArrayToQualityDesignations(bitArr,designations='all'):
-	'''
-	Convert row by col by 16 bit depth array into landsat quality designations
-	Input: bitArr = row by col by 16 bit depth array; designations='all','cloudsTerrainSnow' for which bits to return
-	Output = outDict = dictionary where keys contain rasters of yes/maybe/no/unknown. For 2 bit items, -1 = no, 0 = unknown, 1 = maybe, 2 = yes. For 1 bit items (terrainOcclusion,droppedFrame,designatedFill), 1 = yes, 0 = no
-	Modified from function named qualityAssessmentBand on https://github.com/poldrosky/alternar/blob/95b78fa0b8f4961caeb3b75ceb825349ae3f11ff/DNtoToAReflectanceL8/DNtoToAReflectanceL8.py
-	'''
-	valueMeanings = {'0':'No', '1':'Yes', '00':'Not Determined', '01':'No', '10':'Maybe', '11':'Yes'}
-
-# 	if designations =='all':
-# 		cloud = convertDoubleArrBitToIntArr(bitArr[:,:,0:2])
-# 		cirrus = convertDoubleArrBitToIntArr(bitArr[:,:,2:4])
-# 		snowIce = convertDoubleArrBitToIntArr(bitArr[:,:,4:6])
-# 		vegetation = convertDoubleArrBitToIntArr(bitArr[:,:,6:8])
-# 		cloudShadow = convertDoubleArrBitToIntArr(bitArr[:,:,8:10])
-# 		water = convertDoubleArrBitToIntArr(bitArr[:,:,10:12])
-# 		reserved = bitArr[:,:,12:13]
-# 		terrainOcclusion = bitArr[:,:,13:14]
-# 		droppedFrame = bitArr[:,:,14:15]
-# 		designatedFill = bitArr[:,:,15:16]
-# 	
-# 		outDict = {'key':valueMeanings,'cloud':cloud, 'cirrus':cirrus,'snowIce':snowIce,'veg':vegetation,"cloudShadow":cloudShadow,"water":water,"reserved":reserved,"terrainOcclusion":terrainOcclusion,"droppedFrame":droppedFrame,"fill":designatedFill }			
-# 	
-# 	elif designations == 'cloudsTerrainSnow':
-# 		cloud = convertDoubleArrBitToIntArr(bitArr[:,:,0:2])
-# 		cirrus = convertDoubleArrBitToIntArr(bitArr[:,:,2:4])
-# 		snowIce =convertDoubleArrBitToIntArr( bitArr[:,:,4:6])
-# 		cloudShadow = convertDoubleArrBitToIntArr(bitArr[:,:,8:10])
-# 		terrainOcclusion = convertDoubleArrBitToIntArr(bitArr[:,:,13:14])
-# 		outDict = {'key':valueMeanings,'cloud':cloud, 'cirrus':cirrus,'snowIce':snowIce,"cloudShadow":cloudShadow,"terrainOcclusion":terrainOcclusion }			
-
-	if designations =='all':
-		cloud = convertDoubleArrBitToIntArr(bitArr[:,:,14:16])
-		cirrus = convertDoubleArrBitToIntArr(bitArr[:,:,12:14])
-		snowIce = convertDoubleArrBitToIntArr(bitArr[:,:,10:12])
-		vegetation = convertDoubleArrBitToIntArr(bitArr[:,:,8:10])
-		cloudShadow = convertDoubleArrBitToIntArr(bitArr[:,:,6:8])
-		water = convertDoubleArrBitToIntArr(bitArr[:,:,4:6])
-		reserved = bitArr[:,:,3:4]
-		terrainOcclusion = bitArr[:,:,2:3]
-		droppedFrame = bitArr[:,:,1:2]
-		designatedFill = bitArr[:,:,0:1]
-	
-		outDict = {'key':valueMeanings,'cloud':cloud, 'cirrus':cirrus,'snowIce':snowIce,'veg':vegetation,"cloudShadow":cloudShadow,"water":water,"reserved":reserved,"terrainOcclusion":terrainOcclusion,"droppedFrame":droppedFrame,"fill":designatedFill }			
-	
-	elif designations == 'cloudsTerrainSnow':
-		cloud = convertDoubleArrBitToIntArr(bitArr[:,:,0:2])
-		cirrus = convertDoubleArrBitToIntArr(bitArr[:,:,2:4])
-		snowIce =convertDoubleArrBitToIntArr( bitArr[:,:,4:6])
-		cloudShadow = convertDoubleArrBitToIntArr(bitArr[:,:,8:10])
-		terrainOcclusion = convertDoubleArrBitToIntArr(bitArr[:,:,13:14])
-		outDict = {'key':valueMeanings,'cloud':cloud, 'cirrus':cirrus,'snowIce':snowIce,"cloudShadow":cloudShadow,"terrainOcclusion":terrainOcclusion }			
-
-
-	return outDict
-	
-def makeQAplot(qaDict,plotToggle=True,saveToggle=True,outName='tmp.tif'):
-	cloudMa = np.ma.masked_where(qaDict['cloud']<1,qaDict['cloud'])
-	cirrusMa = np.ma.masked_where(qaDict['cirrus']<1,qaDict['cirrus'])
-	snowMa = np.ma.masked_where(qaDict['snowIce']<1,qaDict['snowIce'])	
-	terrainMa = np.ma.masked_where(qaDict['terrainOcclusion']<1,qaDict['terrainOcclusion'])		
-	vegMa = np.ma.masked_where(qaDict['veg']<1,qaDict['veg'])
-	waterMa =  np.ma.masked_where(qaDict['water']<1,qaDict['water'])
-
-	plt.figure()
-	plt.imshow(cloudMa,cmap='autumn')
-	plt.imshow(snowMa,cmap='cool_r')
-	plt.imshow(snowMa,cmap='YlGn')
 
 
 

@@ -7,7 +7,7 @@
 #writePath="/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/log10_files/"
 writePath="/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/log10/"
 #folderDirectoryWildcard=/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/p06*/
-folderDirectoryWildcard=/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/6*
+folderDirectoryWildcard=/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/06*
 # Loop through all path/row folders in pycorr folder
 for folders in $folderDirectoryWildcard; do
 	echo "Cd to path-row folder: " $folders
@@ -23,8 +23,13 @@ for folders in $folderDirectoryWildcard; do
 			log10File=$(ls *log10.tif)
 			# Where to write to
 			writeDestination=$writePath$log10File
+			
+			if [ ! -f $writeDestinateion ]; then
+				echo "Write destination doesnt exist: ", $writeDestination
+			fi
+			
 			# Copy the vv file to desired folder
-			cp $log10File $writeDestination 
+			#cp $log10File $writeDestination 
 			cd .. # Go back to Image folder
 		done
 		cd .. # Go back to path-row folder

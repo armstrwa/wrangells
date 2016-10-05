@@ -1415,6 +1415,28 @@ def makeRGBfromBands(folderPath,outName,tr = 'auto', bs=[4,3,2]):
 	print "Created file: " + outName
 
 
+def interpolateShapelyLineGeom(line,dDist):
+	'''
+	Interpolate points at specified distance along shapely line geometry
+	Inputs: line = shapely line geometry, dDist = specified interpolation distance
+	Outputs: x, y coordinates at specified interpolation distance
+	'''
+
+	lineLen = line.length # get line length
+
+	interpDist = np.arange(0,lineLen,dDist) # make an array of desired distances to get coordiantes for
+
+	# initialize
+	xInt = []
+	yInt = []
+
+	# iterate over interpolation list and get line coords at specified distances
+	for distNow in interpDist:
+		xNow,yNow = line.interpolate(distNow).xy
+		xInt.append(xNow[0])
+		yInt.append(yNow[0])
+	
+	return xInt, yInt
 
 
 

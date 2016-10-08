@@ -48,10 +48,11 @@ def makeRGBfromBands(folderPath,outName,tr = 'auto', bs=[4,3,2]):
 #outPath = '/Volumes/oldEthan/l8_imagery/imagery/falseColorComposite/'
 
 # lab computer
-folderPath = '/Users/anderson/Desktop/tmp/'
+folderPath = '/Users/anderson/Desktop/ARMSTRONG/wrangells/imagery/Bulk_Order_708942/L8_OLI_TIRS/'
 outPath = '/Users/anderson/Desktop/ARMSTRONG/wrangells/imagery/falseColorComposite/'
 				
 folderList = os.listdir(folderPath)
+
 
 for folder in folderList:
 	if os.path.isdir(folderPath + folder):
@@ -64,5 +65,14 @@ for folder in folderList:
 				outName = outPath + subfolder + '_rgb' + str(bs[0]) + str(bs[1]) + str(bs[2]) + '.tif'
 				makeRGBfromBands(subPath,outName,250,bs)
 				
-				
+
+# was doing for a folder with different file structure				
+if(0):
+	for folder in folderList[1:]:
+		subPath = folderPath + folder + '/'
+		outName = outPath + folder + '_rgb' + str(bs[0]) + str(bs[1]) + str(bs[2]) + '.tif'
+		print outName
+		bs = (7,5,3)
+	
+		makeRGBfromBands(subPath,outName,250,bs)
 				

@@ -18,9 +18,11 @@ import numpy as np
 # import scipy as sci 
 # import csv
 import glob
+from functools import partial
 import matplotlib.pyplot as plt
 import json
 from shapely import geometry
+from shapely.ops import transform
 import fiona
 from osgeo import ogr, osr, gdal
 from pyproj import Proj, transform
@@ -905,7 +907,7 @@ def getCorrelationInfoFromFn(corrFnFullFilepath):
 # 	stop_dec_year=wgt.toYearFraction(dt_2.date())
 # 	mid_dec_year=wgt.toYearFraction(mid_dt.date())	
 
-	profile_dict={ 'delts_days':delts_days,\
+	profile_dict={ 'delts_days':delts_days,'image1fn':image1,'image2fn':image2,\
 					'series':series_tag, 'start_dec_year':start_dec_year, 'stop_dec_year':stop_dec_year, 'mid_dec_year':mid_dec_year,\
 					'path':path, 'row':row, 'infile':filename, 'indir':filepath }
 					
@@ -1093,6 +1095,8 @@ def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265],axis='auto
 	Input: json filename to process
 	Output: data = x, nAll, uAll, nWinter, uWinter ... 
 	Old and clunky
+	
+	Added NDSI 05oct2016 wha
 	'''
 
 	with open(fnIn) as data_file:
@@ -1130,6 +1134,9 @@ def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265],axis='auto
 		endDoy=np.round((endDecYear-endYear)*365)
 		daysBtwn = np.array(profiles[i]['delts_days'])
 	
+		ndsi1 = np.array(profiles[i]['image1_snowIndex'])
+		ndsi2 = np.array(profiles[i]['image2_snowIndex'])
+		
 		# Plot point
 		#Start season based
 		# Identify start seasons
@@ -1146,7 +1153,7 @@ def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265],axis='auto
 		elif int(middleDoy) >= startSeasons[3] and int(middleDoy) < startSeasons[0]:
 			seasonColor = 'r' # fall color
 			midSeason = 'fall'
-			
+		
 		# Compiling seasonal velocity
 		if midSeason == 'winter':
 			if len(uWi) == 0:
@@ -1168,10 +1175,10 @@ def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265],axis='auto
 				uFa = u
 			else:
 				uFa = np.row_stack((uFa,u))	
-				
+			
 
 		#ax1.plot(x/1e3,u,linewidth=0,marker='.',color=seasonColor,alpha=0.5)
-	
+
 	# If no correlations in that season, then nan
 	if len(uWi) == 0:
 		uWi = np.empty((1,len(x)))
@@ -1201,14 +1208,14 @@ def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265],axis='auto
 		uFaStats.fill(np.nan)
 	else:
 		uFaStats = calculateSeasonalVelocityStats(uFa)			
-							
+						
 	uAllStats = calculateSeasonalVelocityStats(uMatx.transpose())
 
 
 
-	
-	
-	
+
+
+
 	if len(uWiStats.shape)<=1: # this true if not enough data to properly calculate	
 		uWiStats = np.empty((5,len(x)))
 		uWiStats[:] = np.nan
@@ -1221,41 +1228,41 @@ def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265],axis='auto
 	if len(uFaStats.shape)<=1: # this true if not enough data to properly calculate	
 		uFaStats = np.empty((5,len(x)))
 		uFaStats[:] = np.nan			
-		
+	
 	# Difference from median			
 	uWiDiff50 = uWiStats[2,:] - uAllStats[2,:]
 	uSpDiff50 = uSpStats[2,:] - uAllStats[2,:]
 	uSuDiff50 = uSuStats[2,:] - uAllStats[2,:]
 	uFaDiff50 = uFaStats[2,:] - uAllStats[2,:]				
-	
+
 	# Greater than 50th/75th %
-	
+
 	uWiGt50 = uWiDiff50 >= 0
 	uSpGt50 = uSpDiff50 >= 0
 	uSuGt50 = uSuDiff50 >= 0	
 	uFaGt50 = uFaDiff50 >= 0	
-		
+	
 	uWiGt75 = uWiStats[2,:] >= uAllStats[3,:]
 	uSpGt75 = uSpStats[2,:] >= uAllStats[3,:]	
 	uSuGt75 = uSuStats[2,:] >= uAllStats[3,:]	
 	uFaGt75 = uFaStats[2,:] >= uAllStats[3,:]	
-	
+
 	# Less than 25ths
 	uWiLt25 = uWiStats[2,:] <= uAllStats[1,:]
 	uSpLt25 = uSpStats[2,:] <= uAllStats[1,:]
 	uSuLt25 = uSuStats[2,:] <= uAllStats[1,:]
 	uFaLt25 = uFaStats[2,:] <= uAllStats[1,:]
-	
+
 	# Filter out seasons with too little data
 	obsNumThreshold = 3
 	wiBadObsInd = np.where(obsNum[:,2]<obsNumThreshold)
 	uWi50plot = np.copy(uWiStats[2,:])
 	uWi50plot[wiBadObsInd] = np.nan
-	
+
 	spBadObsInd = np.where(obsNum[:,3]<obsNumThreshold)
 	uSp50plot = np.copy(uSpStats[2,:])
 	uSp50plot[spBadObsInd] = np.nan	
-	
+
 	suBadObsInd = np.where(obsNum[:,4]<obsNumThreshold)
 	uSu50plot = np.copy(uSuStats[2,:])
 	uSu50plot[suBadObsInd] = np.nan		
@@ -1263,7 +1270,7 @@ def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265],axis='auto
 	faBadObsInd = np.where(obsNum[:,5]<obsNumThreshold)
 	uFa50plot = np.copy(uFaStats[2,:])
 	uFa50plot[faBadObsInd] = np.nan		
-	
+
 	# Set up plot
 	gs = gridspec.GridSpec(4,1,height_ratios=[1,3,1,1])
 	ax1=plt.subplot(gs[1])
@@ -1283,7 +1290,7 @@ def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265],axis='auto
 	ax1.plot(x/1e3,uAllStats[2,:],lw=2,color='k',label='Median: all data')	
 	ax1.plot(x/1e3,uAllStats[3,:],lw=1,color='k',label='25th-75th %: all data')
 	ax1.fill_between(x/1e3,	uAllStats[1,:],uAllStats[3,:],color='gray',alpha=0.1)
-	
+
 	# seasonal medians
 	if 1:
 		ax1.plot(x/1e3,uWiStats[2,:],lw=2,color='c')
@@ -1295,14 +1302,14 @@ def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265],axis='auto
 		ax1.plot(x/1e3,uSp50plot,lw=2,color='orange')
 		ax1.plot(x/1e3,uSu50plot,lw=2,color='g')
 		ax1.plot(x/1e3,uFa50plot,lw=2,color='y')		
-	
+
 	# Seasonal difference from all data median
 	ax4.plot(x/1e3,uWiDiff50,lw=2,ls='-',color='c')
 	ax4.plot(x/1e3,uSpDiff50,lw=2,ls='-',color='y')
 	ax4.plot(x/1e3,uSuDiff50,lw=2,ls='-',color='g')
 	ax4.plot(x/1e3,uFaDiff50,lw=2,ls='-',color='r')			
 	ax4.plot(x/1e3,np.zeros(len(x)),lw=1,ls='--',color='k')
-	
+
 	xLims4 = [-.3, .3]
 	xMax4 = xLims4[1]
 	xMin4 = xLims4[0]
@@ -1310,7 +1317,7 @@ def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265],axis='auto
 	trueLoc2 = 0.04
 	trueLoc3 = 0.06
 	trueLoc4 = 0.08
-			
+		
 	# Where seasonal velocity is gt 75th percentile
 	ax4.plot(x[uWiGt75==True]/1e3,uWiGt75[uWiGt75==True]*(xMax4 - trueLoc1),lw=0,marker='o',color='c',alpha=0.5)
 	ax4.plot(x[uSpGt75==True]/1e3,uSpGt75[uSpGt75==True]*(xMax4 - trueLoc2),lw=0,marker='o',color='y',alpha=0.5)
@@ -1322,41 +1329,45 @@ def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265],axis='auto
 	ax4.plot(x[uSpLt25==True]/1e3,uSpLt25[uSpLt25==True]*(xMin4 + trueLoc2),lw=0,marker='o',color='y',alpha=0.5)
 	ax4.plot(x[uSuLt25==True]/1e3,uSuLt25[uSuLt25==True]*(xMin4 + trueLoc3),lw=0,marker='o',color='g',alpha=0.5)
 	ax4.plot(x[uFaLt25==True]/1e3,uFaLt25[uFaLt25==True]*(xMin4 + trueLoc4),lw=0,marker='o',color='r',alpha=0.5)
-	
+
 	saveData = np.vstack((x,obsNum[:,1],uAllStats[1,:],uAllStats[2,:],uAllStats[3,:],obsNum[:,2],uWiStats[2,:],obsNum[:,3],uSpStats[2,:],obsNum[:,4],uSuStats[2,:],obsNum[:,5],uFaStats[2,:]))
 	saveDataT = saveData.transpose()
 	np.savetxt(pathOut + transName +'_velocityStats.csv',saveDataT,delimiter=',')
-			 
-						
+		 
+					
 	## GET ELEVATION PROFILE
 	#elevData = np.genfromtxt(elevationProfileFolder + shapefileName[:-4] + '_elevationProfile.csv',delimiter=',')
 	if(0):
 		elevData = np.genfromtxt('/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/dtm/elevationProfiles/' + transName + '_elevationProfile.csv',delimiter=',')
 		ax3.plot(elevData[:,0]/1e3,elevData[:,1],color='gray')		
-	
+
+	ax3.plot(x/1e3,ndsi1,lw=2,alpha=0.7,c='b')
+	ax3.plot(x/1e3,ndsi2,lw=2,alpha=0.7,c='b')	
+
 	ax2.plot(obsNum[:,0]/1e3,obsNum[:,1],marker='.',color='k')
 	ax2.plot(obsNum[:,0]/1e3,obsNum[:,2],marker='.',color='c')
 	ax2.plot(obsNum[:,0]/1e3,obsNum[:,3],marker='.',color='y')	
 	ax2.plot(obsNum[:,0]/1e3,obsNum[:,4],marker='.',color='g')
 	ax2.plot(obsNum[:,0]/1e3,obsNum[:,5],marker='.',color='r')		
-					
+				
 
 
 	ax3.set_xlabel('Distance from headwall [km]',fontsize=16)
 	ax1.set_ylabel('Velocity [m d$^{-1}$]',fontsize=16)
 	ax2.set_title(transName,fontsize=18)
-	
+
 	ax1.plot(-1,-1,marker='.',color='c',linewidth=0,label='Winter')
 	ax1.plot(-1,-1,marker='.',color='y',linewidth=0,label='Spring')
 	ax1.plot(-1,-1,marker='.',color='g',linewidth=0,label='Summer')
 	ax1.plot(-1,-1,marker='.',color='r',linewidth=0,label='Fall')
 
-	
+
 	#ax3.set_ylim([np.nanmin(elevData[:,1]),	np.nanmax(elevData[:,1])])
 	ax2.set_ylabel('# Observations',fontsize=18)
 	ax2.yaxis.set_label_position("right")
-	ax3.set_ylabel('Elevation [m]',fontsize=18)
+	ax3.set_ylabel('NDSI [-]',fontsize=18)
 	#ax2.set_yticks(np.arange( round(elevData[:,1].min()/500)*500,round(elevData[:,1].max()/500)*500+500,500))
+	ax3.set_yticks((np.arange(-0.25,1.25,0.25)))
 	#ax1.set_ylim([0,np.nanmin((2.5,np.nanmax(uAllStats[4,:])))]) # auto-scaling limits
 	ax1.set_ylim([0,2])
 	ax1.set_xlim([0,x.max()/1e3])
@@ -1367,13 +1378,13 @@ def computeStatsAndPlot(fnIn,pathOut,startSeasons=[304, 81, 121, 265],axis='auto
 	ax4.set_ylim(xLims4)
 	ax4.set_ylabel('Diff. from annual median',fontsize=18)
 	ax4.yaxis.set_label_position("right")
-		
+	
 	ax1.legend(loc='best',prop={'size':6},numpoints=1)
 	plt.draw()
 	plt.savefig(pathOut + transName + '_profilePlot_wSeasonalMedian_wElevation_wDataNum_wDiffFromMean.pdf')
 	#plt.show()
 	plt.close()		
-	
+		
 	return saveData
 
 
@@ -1438,6 +1449,111 @@ def interpolateShapelyLineGeom(line,dDist):
 	
 	return xInt, yInt
 
+def calculateNDSI(imageDirectory,saveImageToggle=0,overwrite=0):
+	'''
+	Calculate normalized difference snow index for landsat multiband data
+	Input: imageDirectory = directory containing landsat bands for one day at one path/row;
+	Input: saveImageToggle = 0 to not output a geotiff
+	Input: overwrite = 0 to not overwrite an existing ndsi image;
+	Output: ndsi = np.array of snow index values
+	'''
+	# Test for existence
+	outFn = imageDirectory + imageDirectory.split('/')[-2] + '_ndsi.TIF'
+	
+	if os.path.isfile(outFn) and overwrite == 0 and saveImageToggle == 1:
+		print "File already exists: " + outFn	
+	else:
+		# Locate green and swir files in directory
+		greenFn = glob.glob(imageDirectory+'*_B3.TIF')[0]
+		swirFn = glob.glob(imageDirectory+'*_B6.TIF')[0]
+
+		# Also more bands needed for true color
+		redFn = glob.glob(imageDirectory+'*_B4.TIF')[0]
+		blueFn = glob.glob(imageDirectory+'*_B2.TIF')[0]
+
+		# Let's just to panchromatic for simplicity
+		#panFn = glob.glob(imageDirectory+'*_B8.TIF')[0]
+
+		# Open files
+		greenRast = gdal.Open(greenFn)
+		swirRast = gdal.Open(swirFn)
+		#panRast = gdal.Open(panFn)
+
+		green = greenRast.ReadAsArray().astype(np.float)
+		swir = swirRast.ReadAsArray().astype(np.float)
+		#pan = panRast.ReadAsArray().astype(np.float)
+
+		# Calculate NDSI
+		ndsi = (green-swir)/(green+swir)
+
+		# NDSI histogram
+		#hist,edges = np.histogram(ndsi,range=(-1,1),bins=100)
+		#plt.plot(edges[1:],hist)
+		#plt.show()
+
+		if 0: # disabling functionality for now 05oct2016 wha
+			# Delineate snow
+			snowInd = np.where(ndsi>=snowThreshold)
+			snow = np.copy(ndsi)
+			snow[:,:] = 0
+			snow[snowInd] = 1
+
+			# Delineate ice
+			iceInd = np.logical_and(ndsi>=iceThreshold,ndsi<snowThreshold)
+			ice = np.copy(ndsi)
+			ice[:,:] = 0
+			ice[iceInd] = 0.5
+
+			# mask
+			#G = np.copy(ndsi)
+			G = np.zeros((ndsi.shape[0],ndsi.shape[1],3))
+			G[:,:] = [0,0,0]
+			G[ice>0] = [1,0,0]
+			G[snow>0] = [0,0,1]
+
+			### SAVING AND PLOTTING ###
+
+			if plotImageToggle == 1:
+				# Plot
+				plt.subplot(121)
+				plt.imshow(ndsi,vmin=0,vmax=1)
+				plt.title('NDSI')
+				#plt.colorbar()
+
+				plt.subplot(122)
+				plt.imshow(G,interpolation='nearest')
+				plt.title('Snow = blue, ice = red')
+				plt.show()
+				plt.close()
+	
+		if saveImageToggle == 1:
+					[cols,rows] = ndsi.shape
+					trans       = greenRast.GetGeoTransform()
+					proj        = greenRast.GetProjection()
+			
+					outFn = imageDirectory + imageDirectory.split('/')[-2] + '_ndsi.TIF'
+					print "Writing out file: ", outFn
+					
+					# Create the file, using the information from the original file
+					outdriver = gdal.GetDriverByName("GTiff")
+					outData   = outdriver.Create(str(outFn), rows, cols, 1, gdal.GDT_Float32, options = [ 'COMPRESS=LZW' ])
+
+
+					# Write the array to the file, which is the original array in this example
+					outData.GetRasterBand(1).WriteArray(ndsi)
+
+					# Set a no data value if required
+					outData.GetRasterBand(1).SetNoDataValue(-1)
+
+					# Georeference the image
+					outData.SetGeoTransform(trans)
+
+					# Write projection information
+					outData.SetProjection(proj)
+			
+					outData.FlushCache() 
+			
+		return ndsi 
 
 
 

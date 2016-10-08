@@ -56,7 +56,7 @@ def makeCorrelationName(masterShortFn,slaveShortFn,outDir='/Users/anderson/Deskt
 
 ### USER INPUTS ###
 
-folderPath='/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/066_017/band8/'
+folderPath='/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/067_017/band8/'
 outputDirectory='/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/' # want to make functionality to specify output directory, but avoiding for now -- wha 29sep16
 
 sourceChipSize = 24

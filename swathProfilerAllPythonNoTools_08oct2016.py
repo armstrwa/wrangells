@@ -69,12 +69,13 @@ if billyCpuToggle == 1:
 elif labCpuToggle == 1:
 	#shapefileIn='/Users/wiar9509/git/pySwath/stEliasTransectsUtm7n.shp'		
 	#shapefileIn='/Users/wiar9509/git/pySwath/wrangellsTransectsUtm7n.shp'
-	#shapefileIn='new_centerlines_withChugach_06oct2016.shp'
+	shapefileIn='/Users/anderson/Desktop/ARMSTRONG/wrangells/qgis/newWStETransectsUtm7n_24sep15.shp'
 	wgs84centerlinesFn = '/Users/anderson/Desktop/ARMSTRONG/wrangells/qgis/new_centerlines_withChugach_06oct2016.shp'
 	albersCenterlinesFn = '/Users/anderson/Desktop/ARMSTRONG/wrangells/qgis/new_centerlines_withChugach_epsg102006.shp'
-	utm6nCenterlinesFn = '/Users/anderson/Desktop/ARMSTRONG/wrangells/qgis/new_centerlines_withChugach_epsg32606_utm6n.shp'
-	utm7nCenterlinesFn = '/Users/anderson/Desktop/ARMSTRONG/wrangells/qgis/new_centerlines_withChugach_epsg32607_utm7n.shp'	
-	shapefileEPSG = 32607 # proj doesn't know EPSG 102006?
+	shapefileIn='/Users/anderson/Desktop/ARMSTRONG/wrangells/qgis/centerline_transects_onlyUtm6n_08oct2016.shp'
+	shapefileEPSG = 32606 # proj doesn't know EPSG 102006?
+#	shapefileIn='/Users/anderson/Desktop/ARMSTRONG/wrangells/qgis/centerline_transects_onlyUtm7n_08oct2016.shp'
+#	shapefileEPSG = 32607 # proj doesn't know EPSG 102006?	
 	rasterDirectory = '/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/select/filtered/'
 	outDirectory = '/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/select/filtered/swath/'
 	#jsonDataFn = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/vv_files/filtered/EPSG102006/L8SamplerOutput/kaskWB_evenlySpace_100m_profiles_sampled_2015-12-04.json'
@@ -89,18 +90,17 @@ elif labCpuToggle == 1:
 ## -------- ##
 
 
-wgsShp = ogr.Open(wgs84centerlinesFn) # open shapefile containing multipolylines to sample
-lyr = wgsShp.GetLayer(0) # get first layer
+shp = ogr.Open(shapefileIn) # open shapefile containing multipolylines to sample
+lyr = shp.GetLayer(0) # get first layer
 
-if 0: # turning this check off 08 oct 2016 wha
-	if lyr.GetSpatialRef() is not None: # if shapefile has proper spatial reference
-		originalSrsProj = lyr.GetSpatialRef().ExportToProj4() # get spatial reference of layer
-	else:
-		originalSrsProj = Proj(init='EPSG:'+str(shapefileEPSG)) # otherwise have to manually tell EPSG for spatial reference
+if lyr.GetSpatialRef() is not None: # if shapefile has proper spatial reference
+	originalSrsProj = lyr.GetSpatialRef().ExportToProj4() # get spatial reference of layer
+else:
+	originalSrsProj = Proj(init='EPSG:'+str(shapefileEPSG)) # otherwise have to manually tell EPSG for spatial reference
 
 if 1:
 	# List transect names
-	with fiona.open(wgs84centerlinesFn) as c:
+	with fiona.open(shapefileIn) as c:
 		for f in c:
 			print f['id'], f['properties']['name']
 
@@ -110,29 +110,11 @@ for featNum in range(0,lyr.GetFeatureCount()): # iterate over all transects
 	#feat = lyr.GetFeature(19) # kaskWB if using the st elias utm7n transects
 	#feat = lyr.GetFeature(8) # nabeEB if using the wrangells utm7n transects
 	#featNum = 17 # nabeEB if using new WStE transects
-	# Bring in feature from WGS84 dataset
 	feat = lyr.GetFeature(featNum) # get feature
 	lineGeom = feat.geometry() # get geometry of profile line
-	wgsLineGeom = geometry.base.geom_from_wkt(lineGeom.ExportToWkt()) # turn ogr geom into shapely geom
+	shapelyLineGeom = geometry.base.geom_from_wkt(lineGeom.ExportToWkt()) # turn ogr geom into shapely geom
 	transName = feat.GetField(1) # transect name
-	
-	zones = wgt.getUtmZones(wgsLineGeom) # get utm zone (may be multiple if centerline spans zones)
-	
-	shapefileEPSG = wgt.getEPSGforUTMzone(zones[0]) # get epsg for utm zone, using first zone if multiple exist
-	
-	# Get proper UTM dataset for current centerline transect
-	if shapefileEPSG == 32606:
-		shapefileIn = utm6nCenterlinesFn
-		shp = fiona.open(utm6nCenterlinesFn)
-		
-	elif shapefileEPSG == 32607:
-		shapefileIn = utm7nCenterlinesFn	
-		shp = fiona.open(utm7nCenterlinesFn)
-	
-	originalSrsProj = shp.crs	
-	feat = shp[featNum]
-	shapelyLineGeom = geometry.shape(feat['geometry'])
-	
+
 	# Make shapefile for swath profiling
 	xInt,yInt = wgt.interpolateShapelyLineGeom(shapelyLineGeom,dDist) # interpolate vertices using shapely
 

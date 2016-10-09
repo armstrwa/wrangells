@@ -1555,6 +1555,30 @@ def calculateNDSI(imageDirectory,saveImageToggle=0,overwrite=0):
 			
 		return ndsi 
 
+def getUtmZones(shapelyGeometry):
+	'''
+	Get UTM zone numbers intersecting a geometry
+	Input: shapely geometry
+	Output: list of utm zone numbers
+	'''
+	
+	utmZoneShpFn = '/Users/anderson/Desktop/ARMSTRONG/wrangells/qgis/UTM_Zone_Boundaries/UTM_Zone_Boundaries.shp'
+	utmZones = fiona.open(utmZoneShpFn)
+
+	zones = []
+	for zone in utmZones:
+		zoneGeom = geometry.asShape(zone['geometry'])
+		if zoneGeom.intersects(shapelyGeometry):
+			zones.append(zone['properties']['ZONE'])
+
+	return zones
+
+def getEPSGforUTMzone(utmZone):
+	'''
+	Very simple fn to get EPSG number for a given utm zone (assumes northern hemisphere)
+	'''
+	return 32600 + int(utmZone)
+
 
 
 

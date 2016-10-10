@@ -24,7 +24,7 @@ vvIndir = '/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/select/'
 #accessoryIndirPrefix = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/corr/pycorr/' # root directory for correlations
  
 # Where to write filtered files to 
-outdir = '/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/select/filtered/'
+outDir = '/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/select/filtered/'
 
 outTag = 'filt_corr'+str(corrMin)+'_delcorr'+str(delcorrMin)+'.tif' # This will be the end of the filename of each output 
 
@@ -249,7 +249,9 @@ for i in range(len(allFiles)):
 				  "_delcorr" + str(delcorrMin) + ".tif"
 		
 		# Only filter if doesn't already exist
-		if not os.path.isfile(outdir + outName):
+		if os.path.isfile(outDir + outName):
+			print "Filtered file already exists: ", outDir + outName
+		else:
 			# Run the filter
 			velocityFilter(corrMin,delcorrMin,noDataValue,vvPath,outdir)
 

@@ -114,7 +114,8 @@ def makeCorrFilepath(corrFolder,corrFn):
 ### USER DEFINED ###
 
 # list of good corelations
-corrList = '/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/select/selectWinterCorrelationList.csv'
+#corrList = '/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/select/selectWinterCorrelationList.csv'
+corrList = '/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/select/selectSummerCorrelationList.csv'
 
 # where do all correlations sit?
 corrFolder = '/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/'
@@ -148,15 +149,17 @@ for corrName in corrNames:
 	for copyFile in filesToCopy:
 		shortFn = os.path.split(copyFile)[1]
 		outName = outputFolder + shortFn # generate output name
-		if not os.path.isfile(outName): # don't move if it's already there
+		if os.path.isfile(outName):
+			print "File already exists: " + copyFile
+		else: # don't move if it's already there
 			print "Moving files for " + copyFile
 			copyCmd = "cp " + copyFile + " " + outName
 			os.system(copyCmd) # copy over
 
 
 ### MOVE LOG10files
-if 0:
-	pathRowFolder = '064_017/'
+if 1:
+	pathRowFolder = '066_017/'
 	foldersInPathRow=glob.glob(corrFolder + pathRowFolder + "LC*")
 	log10folder = '/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/log10/'
 

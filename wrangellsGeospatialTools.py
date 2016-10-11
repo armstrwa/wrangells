@@ -1579,6 +1579,13 @@ def getEPSGforUTMzone(utmZone):
 	'''
 	return 32600 + int(utmZone)
 
+def yearFracToDoy(yearFrac):
+	'''
+	Turn a year fraction to a day of year. Could be off by one in leap years..
+	Input = fractional year date (e.g., 2015.328)
+	Output = day of year of input (DOY 120 for above yearFrac)
+	'''
+	return int(np.round((yearFrac - int(yearFrac))*365))
 
 
 

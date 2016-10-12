@@ -226,7 +226,7 @@ ax.grid(True)
 plt.ylabel('Area [m$^2$]',fontsize=16)
 plt.xlabel('Length [m]',fontsize=16)
 plt.legend(loc=2,frameon=False,numpoints=1,fontsize=14)	
-plt.savefig('areaLength_vsRGI.png',dpi=300)
+plt.savefig('areaLength_vsRGI.pdf',dpi=300)
 plt.show()
 plt.close()
 

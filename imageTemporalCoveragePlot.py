@@ -235,6 +235,17 @@ for corrFn in corrList:
 	dtDays.append(corrDict['delts_days'])
 	paths.append(int(corrDict['path']))
 
+width = 14
+dtCount = ( dtDays.count(16*1), dtDays.count(16*2), dtDays.count(16*3), dtDays.count(16*4), dtDays.count(16*5), dtDays.count(16*6), dtDays.count(16*7), dtDays.count(16*8), dtDays.count(16*9), dtDays.count(16*10)) 
+dayLabel = np.arange(16,176,16)
+plt.bar(dayLabel,dtCount,width=width,tick_label=dayLabel,color='cornflowerblue',edgecolor='darkblue',align='center')
+plt.ylim((0,20))
+plt.xlim((6,170))
+plt.ylabel('Number of correlations [-]',fontsize=18)
+plt.xlabel('Correlation timespan [days]',fontsize=18)
+plt.savefig('correlationTimespanHistogram.pdf')
+plt.show()
+plt.close()
 
 pathColors = (np.array(paths) - 62.)/(67.-62.)
 randY = np.random.uniform(0,1000,len(midDates))

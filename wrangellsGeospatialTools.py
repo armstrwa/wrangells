@@ -1589,10 +1589,25 @@ def yearFracToDoy(yearFrac):
 
 
 
+def flipDistance(dist):
+	'''
+	Change distance from headwall to distance from terminus
+	'''
+	
+	totalDist = np.max(dist)
+	termDist = np.ones(len(dist))*totalDist - np.array(dist)
+	
+	return termDist
 
-
-
-
+def normalizeDistance(dist):
+	'''
+	Normalize distance by total glacier length
+	'''
+	totalDist = np.max(dist)
+	normDist = np.ones(len(dist))*dist / totalDist
+	
+	return normDist
+	
 
 
 

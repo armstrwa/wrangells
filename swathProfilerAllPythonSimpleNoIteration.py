@@ -43,12 +43,15 @@ import time
 
 shapefileIn = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/qgis/keinholz_centerlines_paredDownToStudyArea.shp' 
 shapefileEPSG = 3338 # spatial reference code for profile to sample
-rasterIn = '/Users/wiar9509/Google Drive/wrangells/corr/LC80640172014057LGN0_LC80640172014089LGN0_2014-073_32_24_40_10_vv_filt_corr0.15_delcorr0.05_epsg3338.tif'
+#rasterIn = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/qgis/arcticDEM/45_10_1_1_45_09_2_1_merge_dem_epsg3338.tif'
+#rasterIn = '/Users/wiar9509/Google Drive/wrangells/corr/LC80640172014057LGN0_LC80640172014089LGN0_2014-073_32_24_40_10_vv_filt_corr0.15_delcorr0.05_epsg3338.tif'
+rasterIn = '/Users/wiar9509/Google Drive/wrangells/corr/LC80640172016159LGN0_LC80640172016239LGN0_2016-199_80_24_40_10_vv_filt_corr0.15_delcorr0.05_epsg3338.tif'
 dDist = 500 # interpolation distance along transect line
 boxWidth = 1000 # swath profiler width across transect line
 # featNum = 66 for rootCL
 featNum = 66 # if shp is multiline, use id number to choose 1 line 
 outDirectory = '/Users/wiar9509/' # output directory
+outPrefix = 'rootUsummer' # prefix to add to output files
 
 ## -------- ##
 ## ANALYSIS ##
@@ -63,7 +66,7 @@ shapelyLineGeom = geometry.shape(feat['geometry'])
 # Make shapefile for swath profiling
 xInt,yInt = wgt.interpolateShapelyLineGeom(shapelyLineGeom,dDist) # interpolate vertices using shapely
 
-wgt.makePolylineShpFromCoords(xInt,yInt,shapefileEPSG,outDirectory+'tmpSwathSamplePoints.shp')
+wgt.makePolylineShpFromCoords(xInt,yInt,shapefileEPSG,outDirectory+outPrefix+'SwathSamplePoints.shp')
 slopes=wgt.calculateSlopes(xInt,yInt) # calculate "slope" (azimuth) of line segments
 perpSlopes=wgt.calculatePerpendicularSlopes(slopes) # calculate perpendicular "slope" (azimuth)
 allBoxVerts = wgt.makeAllBoxVertices(xInt,yInt,boxWidth) # get box coordinates for each interpolated point, with a specified box width (cross-transect coord)
@@ -72,7 +75,7 @@ allBoxVerts = wgt.makeAllBoxVertices(xInt,yInt,boxWidth) # get box coordinates f
 srs = osr.SpatialReference()
 srs.ImportFromEPSG(shapefileEPSG) # This hard-coded to UTM 7N w/ WGS84 datum. Would be nice to have this defined based of input shapefile
 
-wgt.makeMultipolygonFromBoxVertices(allBoxVerts,srs,outDirectory + 'tmpSamplePolygons.shp') # Make shapefile for swath profiling
+wgt.makeMultipolygonFromBoxVertices(allBoxVerts,srs,outDirectory + outPrefix + 'SamplePolygons.shp') # Make shapefile for swath profiling
 
 profileCoords = wgt.readLineCoordsFromMultiLineShp(shapefileIn,featNum) # get coordinates for PRE-INTERPOLATED centerline profile
 geomToPass = {'type':'LineString','coordinates':profileCoords['samplePtsLatLon']} # make shapely-style geometry dict
@@ -81,10 +84,10 @@ profGeom = geometry.shape(geomToPass) # make into a shapely geometry for testing
 dist = wgt.distanceAlongLine(xInt,yInt) # get distance along line
 dist = np.delete(dist,0) # delete the first entry, which we don't have a value for b/c don't have a slope for the first entry (b/c need to points), so interpolator doesn't make a 0,0 point .. this quick and dirty
 
-interpProfileCoords = wgt.readVertexCoordsFromPolyline(outDirectory + 'tmpSwathSamplePoints.shp') # read vertex coordinates from interpolated line
+interpProfileCoords = wgt.readVertexCoordsFromPolyline(outDirectory + outPrefix + 'SwathSamplePoints.shp') # read vertex coordinates from interpolated line
 
 # Get information about correlation
-corrDict = wgt.getCorrelationInfoFromFn(rasterIn)			
+#corrDict = wgt.getCorrelationInfoFromFn(rasterIn)			
 raster = gdal.Open(rasterIn) # open one correlation
 xyTfm = wgt.createTransformation(rasterIn) # transformation parameters for converting raster pixels to ground coordinates
 
@@ -99,10 +102,11 @@ profile_shapefile_projection_Proj = originalSrsProj
 
 # Swath profile
 try:
-	stats=wgt.zonal_stats(outDirectory + 'tmpSamplePolygons.shp', rasterIn, nodata_value=-1) # swath profile along transect
+	stats=wgt.zonal_stats(outDirectory + outPrefix + 'SamplePolygons.shp', rasterIn, nodata_value=-1) # swath profile along transect
 	statsDict = wgt.readZonalStatsOutput(stats) # read swath profile output
 	
-	profile_dict = wgt.getCorrelationInfoFromFn(rasterIn) # strip filename for correlation parameters
+#	profile_dict = wgt.getCorrelationInfoFromFn(rasterIn) # strip filename for correlation parameters
+	profile_dict = {}
 	profile_dict['mean'] = statsDict['means'] # add mean speed (duplicate, but just to be obvious in future
 	profile_dict['max'] = statsDict['maxs'] # add maximum speed within swath profile polygons
 	profile_dict['min'] = statsDict['mins'] # add minimum speed within swath profile polygons
@@ -116,7 +120,7 @@ try:
 	'profile_shapefile_projection_Proj':originalSrsProj, 'profiles':profile_dict, 'featNum':featNum }
 
 	# Write transect velocity data to json file
-	jsonFnOut = 'tmpSwathVelocitySampling.json'
+	jsonFnOut = outDirectory + outPrefix + 'SwathVelocitySampling.json'
 	wgt.writeJsonFile(profile_data,jsonFnOut)
 	
 	print "Output swath profile data to: " + jsonFnOut
@@ -125,7 +129,20 @@ except: # not sure why this error occuring
 	print "Something failed while profiling transect " + str(featNum)
 	print "For image " + rasterIn 
 	
+# PLOT DATA
+# open json file
+with open(jsonFnOut) as data_file:
+	data = json.load(data_file)
+	
+dist = np.array(data['sample_pts_frontdist']) # distance from headwall [m]
+profile = data['profiles'] # getting all profiles
+mean = np.array(profile['mean'])
+min = np.array(profile['min'])
+max = np.array(profile['max'])
 
-
+plt.fill_between(dist,min,max,color='c',alpha=0.6,lw=0.5)
+plt.plot(dist,mean,lw=2,c='blue')
+plt.show()
+plt.close()
 
 

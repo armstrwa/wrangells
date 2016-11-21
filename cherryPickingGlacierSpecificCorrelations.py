@@ -38,6 +38,65 @@ import matplotlib.gridspec as gridspec
 
 # functions loaded from wrangellsGeospatialTools.pyc
 
+
+def smooth(x,window_len=11,window='hanning'):
+    """smooth the data using a window with requested size.
+
+    This method is based on the convolution of a scaled window with the signal.
+    The signal is prepared by introducing reflected copies of the signal
+    (with the window size) in both ends so that transient parts are minimized
+    in the begining and end part of the output signal.
+
+    input:
+        x: the input signal
+        window_len: the dimension of the smoothing window; should be an odd integer
+        window: the type of window from 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'
+            flat window will produce a moving average smoothing.
+
+    output:
+        the smoothed signal
+
+    example:
+
+    t=linspace(-2,2,0.1)
+    x=sin(t)+randn(len(t))*0.1
+    y=smooth(x)
+
+    see also:
+
+    numpy.hanning, numpy.hamming, numpy.bartlett, numpy.blackman, numpy.convolve
+    scipy.signal.lfilter
+
+    TODO: the window parameter could be the window itself if an array instead of a string
+    NOTE: length(output) != length(input), to correct this: return y[(window_len/2-1):-(window_len/2)] instead of just y.
+    """
+
+    if x.ndim != 1:
+        raise ValueError, "smooth only accepts 1 dimension arrays."
+
+    if x.size < window_len:
+        raise ValueError, "Input vector needs to be bigger than window size."
+
+
+    if window_len<3:
+        return x
+
+
+    if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
+        raise ValueError, "Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'"
+
+
+    s=np.r_[x[window_len-1:0:-1],x,x[-1:-window_len:-1]]
+    #print(len(s))
+    if window == 'flat': #moving average
+        w=np.ones(window_len,'d')
+    else:
+        w=eval('np.'+window+'(window_len)')
+
+    y=np.convolve(w/w.sum(),s,mode='valid')
+    return y[(window_len/2-0):-(window_len/2)]
+
+
 ## ----------- ##
 ## USER INPUTS ##
 ## ----------- ##
@@ -423,63 +482,6 @@ for transName in uniqueNames:
 		
 ### PLOTTING DIFFERENCE FOR ALL GLACIERS
 
-def smooth(x,window_len=11,window='hanning'):
-    """smooth the data using a window with requested size.
-
-    This method is based on the convolution of a scaled window with the signal.
-    The signal is prepared by introducing reflected copies of the signal
-    (with the window size) in both ends so that transient parts are minimized
-    in the begining and end part of the output signal.
-
-    input:
-        x: the input signal
-        window_len: the dimension of the smoothing window; should be an odd integer
-        window: the type of window from 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'
-            flat window will produce a moving average smoothing.
-
-    output:
-        the smoothed signal
-
-    example:
-
-    t=linspace(-2,2,0.1)
-    x=sin(t)+randn(len(t))*0.1
-    y=smooth(x)
-
-    see also:
-
-    numpy.hanning, numpy.hamming, numpy.bartlett, numpy.blackman, numpy.convolve
-    scipy.signal.lfilter
-
-    TODO: the window parameter could be the window itself if an array instead of a string
-    NOTE: length(output) != length(input), to correct this: return y[(window_len/2-1):-(window_len/2)] instead of just y.
-    """
-
-    if x.ndim != 1:
-        raise ValueError, "smooth only accepts 1 dimension arrays."
-
-    if x.size < window_len:
-        raise ValueError, "Input vector needs to be bigger than window size."
-
-
-    if window_len<3:
-        return x
-
-
-    if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
-        raise ValueError, "Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'"
-
-
-    s=np.r_[x[window_len-1:0:-1],x,x[-1:-window_len:-1]]
-    #print(len(s))
-    if window == 'flat': #moving average
-        w=np.ones(window_len,'d')
-    else:
-        w=eval('np.'+window+'(window_len)')
-
-    y=np.convolve(w/w.sum(),s,mode='valid')
-    return y[(window_len/2-0):-(window_len/2)]
-
 
 speedupJsonFn = '/Users/anderson/Desktop/ARMSTRONG/wrangells/corr/select/filtered/swath/speedups.json'
 speedDict = wgt.readJsonFile(speedupJsonFn)
@@ -493,7 +495,8 @@ for transName in speedDict:
 		transNow = speedDict[transName]
 		termDist = transNow['distTerm']
 		diff50 = transNow['diffMedians']
-		
+		minDiff = transNow['minDiff']
+		maxDiff = transNow['maxDiff']		
 		#intFun = interp1d(termDist,diff50,kind='quadratic')
 		#xnew = np.linspace(np.min(termDist),np.max(termDist),300)
 		#intFun = si.UnivariateSpline(termDist,diff50,k=5)
@@ -501,6 +504,7 @@ for transName in speedDict:
 		
 		plt.scatter(np.array(termDist)/1e3,diff50,alpha=0.2,lw=0,color=transCols[colIter])
 		plt.plot(np.array(termDist)/1e3,diff50int,lw=2.5,alpha=0.9,label=transName,c=transCols[colIter])		
+		plt.fill_between(np.array(termDist)/1e3,minDiff,maxDiff,color=transCols[colIter],alpha=0.1,lw=0)
 		colIter+=1
 
 plt.plot((0,80),(0,0),lw=2,c='k',ls='--')
@@ -510,7 +514,7 @@ plt.legend(loc=3,frameon=False,ncol=2)
 plt.ylim((-.5,.5))
 plt.xlim((0,80))
 plt.gca().invert_xaxis()
-plt.savefig('speedupSquiggles.pdf')
+plt.savefig('speedupSquiggles_withFill.pdf')
 plt.show()
 plt.close()
 
@@ -521,7 +525,9 @@ for transName in speedDict:
 		transNow = speedDict[transName]
 		termDist = transNow['distTermNorm']
 		diff50 = transNow['diffMedians']
-		
+		minDiff = transNow['minDiff']
+		maxDiff = transNow['maxDiff']
+				
 		#intFun = interp1d(termDist,diff50,kind='quadratic')
 		#xnew = np.linspace(np.min(termDist),np.max(termDist),300)
 		#intFun = si.UnivariateSpline(termDist,diff50,k=5)
@@ -529,6 +535,7 @@ for transName in speedDict:
 		
 		plt.scatter(np.array(termDist),diff50,alpha=0.2,lw=0,color=transCols[colIter])
 		plt.plot(np.array(termDist),diff50int,lw=2,alpha=0.9,label=transName,c=transCols[colIter])		
+		plt.fill_between(np.array(termDist),minDiff,maxDiff,color=transCols[colIter],alpha=0.1,lw=0)
 		colIter+=1
 
 plt.plot((0,1),(0,0),lw=2,c='k',ls='--')
@@ -538,34 +545,8 @@ plt.legend(loc=3,frameon=False,ncol=2)
 plt.ylim((-.5,.5))
 plt.xlim((0,1))
 plt.gca().invert_xaxis()
-plt.savefig('speedupSquiggles_normalizedDist.pdf')
+plt.savefig('speedupSquiggles_normalizedDist_withFill.pdf')
 plt.show()
 plt.close()
 
 		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-
-	
-	
-
-
-
-
-
-
-

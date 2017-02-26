@@ -1,0 +1,6 @@
+'''
+Master profile figure maker
+27jan2017
+'''
+
+elevationFn = '/Users/wiar9509/Google Drive/wrangells/json/new_centerlines_withChugach_epsg102006_elevationProfiles.json'

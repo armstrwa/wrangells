@@ -187,6 +187,7 @@ plt.close()
 
 ## RGI comparison
 
+#albersRGIfn = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/qgis/rgi_50_epsg3338.shp'
 with fiona.open(albersRGIfn) as rgi:
 	areaList = []
 	zminList = []
@@ -201,6 +202,7 @@ with fiona.open(albersRGIfn) as rgi:
 		zmedList.append(g['properties']['Zmed'])
 		lmaxList.append(g['properties']['Lmax'])
 		
+#rgiStudySubsetFn = '/Users/wiar9509/Documents/CU2014-2015/wrangellStElias/qgis/rgi_subsetToStudyGlaciers_withChugach_epsg102006.shp'
 with fiona.open(rgiStudySubsetFn) as rgiSub:	
 	subAreaList = []
 	subZminList = []
@@ -215,18 +217,18 @@ with fiona.open(rgiStudySubsetFn) as rgiSub:
 		subZmedList.append(g['properties']['Zmed'])
 		subLmaxList.append(g['properties']['Lmax'])	
 
-plt.scatter(lmaxList,areaList,c='gray',alpha=0.6,lw=0,label='Alaska RGI 5.0')
-plt.scatter(subLmaxList,subAreaList,s=50,c='c',alpha=0.8,label='Study glaciers')
-plt.xlim((1e2,2.5e5))
+plt.scatter(np.array(lmaxList)/1e3,areaList,c='gray',alpha=0.6,lw=0,label='Alaska RGI 5.0')
+plt.scatter(np.array(subLmaxList)/1e3,subAreaList,s=50,c='c',alpha=0.8,label='Study glaciers')
+plt.xlim((1e-1,2.5e2))
 plt.ylim((1e-1,1e4))
 ax = plt.gca()
 ax.set_yscale('log')	
 ax.set_xscale('log')
 ax.grid(True)
-plt.ylabel('Area [m$^2$]',fontsize=16)
-plt.xlabel('Length [m]',fontsize=16)
+plt.ylabel('Area [km$^2$]',fontsize=16)
+plt.xlabel('Length [km]',fontsize=16)
 plt.legend(loc=2,frameon=False,numpoints=1,fontsize=14)	
-plt.savefig('areaLength_vsRGI.pdf',dpi=300)
+plt.savefig('areaLength_vsRGI_allKm.pdf',dpi=300)
 plt.show()
 plt.close()
 

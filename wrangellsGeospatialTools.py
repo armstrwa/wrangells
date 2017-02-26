@@ -621,6 +621,100 @@ def zonal_stats(vector_path, raster_path, nodata_value=None, global_src_extent=F
     rds = None
     return stats
 
+# Modified from zonal_stats function above, found at https://gist.github.com/perrygeo/5667173
+def subsetRasterByShapefilePolygon(vector_path, raster_path, nodata_value=None, global_src_extent=False):
+    '''
+    Subset a raster array by a shapefile polygon
+    '''
+    rds = gdal.Open(raster_path, GA_ReadOnly)
+    assert(rds)
+    rb = rds.GetRasterBand(1)
+    rgt = rds.GetGeoTransform()
+
+    if nodata_value:
+        nodata_value = float(nodata_value)
+        rb.SetNoDataValue(nodata_value)
+
+    vds = ogr.Open(vector_path, GA_ReadOnly)  # TODO maybe open update if we want to write stats
+    assert(vds)
+    vlyr = vds.GetLayer(0)
+
+    # create an in-memory numpy array of the source raster data
+    # covering the whole extent of the vector layer
+    if global_src_extent:
+        # use global source extent
+        # useful only when disk IO or raster scanning inefficiencies are your limiting factor
+        # advantage: reads raster data in one pass
+        # disadvantage: large vector extents may have big memory requirements
+        src_offset = bbox_to_pixel_offsets(rgt, vlyr.GetExtent())
+        src_array = rb.ReadAsArray(*src_offset)
+
+        # calculate new geotransform of the layer subset
+        new_gt = (
+            (rgt[0] + (src_offset[0] * rgt[1])),
+            rgt[1],
+            0.0,
+            (rgt[3] + (src_offset[1] * rgt[5])),
+            0.0,
+            rgt[5]
+        )
+
+    mem_drv = ogr.GetDriverByName('Memory')
+    driver = gdal.GetDriverByName('MEM')
+
+    # Loop through vectors
+    stats = []
+    feat = vlyr.GetNextFeature()
+    while feat is not None:
+
+        if not global_src_extent:
+            # use local source extent
+            # fastest option when you have fast disks and well indexed raster (ie tiled Geotiff)
+            # advantage: each feature uses the smallest raster chunk
+            # disadvantage: lots of reads on the source raster
+            src_offset = bbox_to_pixel_offsets(rgt, feat.geometry().GetEnvelope())
+            src_array = rb.ReadAsArray(*src_offset)
+
+            # calculate new geotransform of the feature subset
+            new_gt = (
+                (rgt[0] + (src_offset[0] * rgt[1])),
+                rgt[1],
+                0.0,
+                (rgt[3] + (src_offset[1] * rgt[5])),
+                0.0,
+                rgt[5]
+            )
+
+        # Create a temporary vector layer in memory
+        mem_ds = mem_drv.CreateDataSource('out')
+        mem_layer = mem_ds.CreateLayer('poly', None, ogr.wkbPolygon)
+        mem_layer.CreateFeature(feat.Clone())
+
+        # Rasterize it
+        rvds = driver.Create('', src_offset[2], src_offset[3], 1, gdal.GDT_Byte)
+        rvds.SetGeoTransform(new_gt)
+        gdal.RasterizeLayer(rvds, [1], mem_layer, burn_values=[1])
+        rv_array = rvds.ReadAsArray()
+
+        # Mask the source data array with our current feature
+        # we take the logical_not to flip 0<->1 to get the correct mask effect
+        # we also mask out nodata values explictly
+        masked = np.ma.MaskedArray(
+            src_array,
+            mask=np.logical_or(
+                src_array == nodata_value,
+                np.logical_not(rv_array)
+            )
+        )
+
+        rvds = None
+        mem_ds = None
+        feat = vlyr.GetNextFeature()
+
+    vds = None
+    rds = None
+    return masked
+
 
 def readZonalStatsOutput(zonalStatsOut):
 	'''
@@ -1449,7 +1543,7 @@ def interpolateShapelyLineGeom(line,dDist):
 	
 	return xInt, yInt
 
-def calculateNDSI(imageDirectory,saveImageToggle=0,overwrite=0):
+def calculateNDSI(imageDirectory,saveImageToggle=0,overwrite=0,noDataVal=-1):
 	'''
 	Calculate normalized difference snow index for landsat multiband data
 	Input: imageDirectory = directory containing landsat bands for one day at one path/row;
@@ -1464,12 +1558,15 @@ def calculateNDSI(imageDirectory,saveImageToggle=0,overwrite=0):
 		print "File already exists: " + outFn	
 	else:
 		# Locate green and swir files in directory
-		greenFn = glob.glob(imageDirectory+'*_B3.TIF')[0]
-		swirFn = glob.glob(imageDirectory+'*_B6.TIF')[0]
-
+		# For regular L8 bands
+		#greenFn = glob.glob(imageDirectory+'*_B3.TIF')[0]
+		#swirFn = glob.glob(imageDirectory+'*_B6.TIF')[0]
+		# For L8 land surface reflectance (LSR)
+		greenFn = glob.glob(imageDirectory+'*_band3.tif')[0]
+		swirFn = glob.glob(imageDirectory+'*_band6.tif')[0]
 		# Also more bands needed for true color
-		redFn = glob.glob(imageDirectory+'*_B4.TIF')[0]
-		blueFn = glob.glob(imageDirectory+'*_B2.TIF')[0]
+		#redFn = glob.glob(imageDirectory+'*_B4.TIF')[0]
+		#blueFn = glob.glob(imageDirectory+'*_B2.TIF')[0]
 
 		# Let's just to panchromatic for simplicity
 		#panFn = glob.glob(imageDirectory+'*_B8.TIF')[0]
@@ -1486,6 +1583,12 @@ def calculateNDSI(imageDirectory,saveImageToggle=0,overwrite=0):
 		# Calculate NDSI
 		ndsi = (green-swir)/(green+swir)
 
+		infIndRow,infIndCol = np.where(np.logical_or(np.array(ndsi==np.inf),np.array(ndsi==-np.inf)))
+		nanIndRow,nanIndCol = np.where(np.isnan(ndsi))
+		
+		ndsiOut = np.copy(ndsi)
+		ndsiOut[infIndRow,infIndCol] = noDataVal
+		ndsiOut[nanIndRow,nanIndCol] = noDataVal		
 		# NDSI histogram
 		#hist,edges = np.histogram(ndsi,range=(-1,1),bins=100)
 		#plt.plot(edges[1:],hist)
@@ -1540,10 +1643,10 @@ def calculateNDSI(imageDirectory,saveImageToggle=0,overwrite=0):
 
 
 					# Write the array to the file, which is the original array in this example
-					outData.GetRasterBand(1).WriteArray(ndsi)
+					outData.GetRasterBand(1).WriteArray(ndsiOut)
 
 					# Set a no data value if required
-					outData.GetRasterBand(1).SetNoDataValue(-1)
+					outData.GetRasterBand(1).SetNoDataValue(noDataVal)
 
 					# Georeference the image
 					outData.SetGeoTransform(trans)
@@ -1608,8 +1711,413 @@ def normalizeDistance(dist):
 	
 	return normDist
 	
+def swathFilter(jsonData,countMin=10,stdMax=1):
+	'''
+	Filter velocity data based on swath profiler output (i.e., pixel counts and standard deviation of velocity within swath profiler boxes)
+	Inputs: jsonData = Mark L8 velocity sampler output-style dict.
+	Inputs: countMin = minimum number of non-nan pixels within a swath profiler box to allow data through
+	Inputs: stdMax = maximum standard deviation of velocity within swath profiler box to allow data through
+	Output: profile_data = dict very simialr to input jsonData but updated with with 'stdMax', 'countMin' (just recording the filters used), and 'uMeanClean' that has cleaned velocity data
+	'''
+	nProfiles = len(jsonData['profiles']) # number of profiles (time slices) within json data
+	for i in range(0,nProfiles):
+		profileNow = jsonData['profiles'][i]
+		u = profileNow['speed']
+		counts = profileNow['speedCount']
+		stds = profileNow['speedStd']
+		midYearFrac = profileNow['mid_dec_year']
+	
+		midDoy =  yearFracToDoy(midYearFrac)
+	
+		badDataInd = np.logical_or(np.array(counts)<countMin, np.array(stds)>stdMax)
+		uMa = np.copy(u)
+		uMa[badDataInd] = np.nan
+
+		profileNow['stdMax']=stdMax
+		profileNow['countMin']=countMin
+		profileNow['speedMeanClean']=uMa
+	
+		jsonData['profiles'][i] = profileNow # update with new fields
+	
+	return jsonData
+
+def splitSummerWinter(jsonData,summerStartEnd=((150,250))):
+	'''
+	Split up correlations into winter/summer categories.
+	Inputs: jsonData = mark L8 sampler-like velocity dict
+	Inputs: summerStartEnd = ((150,250)) = DOYs for start/end of summer season for categorizing
+	Outputs: seaonsalVelocityDict.viewkeys() = {'summerCorr','summerSpeeds','winterCorr','winterSpeeds'}
+	Outputs: where summer/winter speeds are velocity matrices (len(space) cols and len(time) rows), and sumer/winter corr are lists of profile dicts.
+	'''
+	# Classify as summer/winter correlations and clean bad data
+	winterCorr = [] # intializing
+	summerCorr = []
+	winterSwathSpeeds = np.nan * np.ones((len(jsonData['profiles'][0]['speed']))) # intializing arrays for stats
+	winterRawSpeeds = np.nan * np.ones((len(jsonData['profiles'][0]['speed']))) # intializing arrays for stats
+	winterTempFilterSpeeds = np.nan * np.ones((len(jsonData['profiles'][0]['speed']))) # intializing arrays for stats
+	summerSwathSpeeds = np.nan * np.ones((len(jsonData['profiles'][0]['speed'])))
+	summerTempFilterSpeeds = np.nan * np.ones((len(jsonData['profiles'][0]['speed'])))
+	summerRawSpeeds = np.nan * np.ones((len(jsonData['profiles'][0]['speed']))) # intializing arrays for stats
+	
+	nProfiles =  len(jsonData['profiles'])
+	# Iterate over profiles
+	for i in range(0,nProfiles):
+		profileNow = jsonData['profiles'][i] # get current profile
+		midYearFrac = profileNow['mid_dec_year'] # get date (fractional year form)
+		midDoy = yearFracToDoy(midYearFrac) # convert fractional year to DOY
+		uCleanNow = profileNow['speedMeanClean'] # get swath-filtered velocity data
+		uTempFilterNow = profileNow['speedTemporalFilter'] # temporally filtered velocity
+		uRawNow  = profileNow['speed'] # raw velocity data
+		
+		# If it's winter
+		if midDoy < summerStartEnd[0] or midDoy > summerStartEnd[1]:
+			winterCorr.append(profileNow) # add correlation to collection of winter correlations
+			winterSwathSpeeds = np.vstack((winterSwathSpeeds,uCleanNow)) # add speed to matrix of winter speeds
+			winterTempFilterSpeeds = np.vstack((winterTempFilterSpeeds,uTempFilterNow)) # add temporally filtered speed to matrix of winter speeds
+			winterRawSpeeds = np.vstack((winterRawSpeeds,uRawNow)) # add raw speed to matrix of winter speeds
+		# If it's summer
+		else:
+			summerCorr.append(profileNow)
+			summerSwathSpeeds = np.vstack((summerSwathSpeeds,uCleanNow))	
+			summerTempFilterSpeeds = np.vstack((summerTempFilterSpeeds,uTempFilterNow))
+			summerRawSpeeds = np.vstack((summerRawSpeeds,uRawNow))
+			
+	# Make dict for output	
+	transName = jsonData['transect_name']
+	seaonsalVelocityDict = {'transName':transName,'summerCorr':summerCorr,'summerSwathSpeeds':summerSwathSpeeds,'summerTempFilterSpeeds':summerTempFilterSpeeds,'winterCorr':winterCorr,'winterSwathSpeeds':winterSwathSpeeds,'winterTempFilterSpeeds':winterTempFilterSpeeds,'summerRawSpeeds':summerRawSpeeds,'winterRawSpeeds':winterRawSpeeds}
+	return seaonsalVelocityDict
+
+def seasonalSpeedupSubFunction(winterSpeeds,summerSpeeds):
+	# Seasonal velocity statistics
+	# Winter (w), summer (s) 25th,50th,and 75th percentile velocities
+	w25,w50,w75 = np.nanpercentile(winterSpeeds,(25,50,75),axis=0)
+	s25,s50,s75 = np.nanpercentile(summerSpeeds,(25,50,75),axis=0)
+	# Number of observations in each season
+	winterDataNum = np.sum(np.isfinite(winterSpeeds),axis=0)	
+	summerDataNum = np.sum(np.isfinite(summerSpeeds),axis=0)
+	# Velocity change
+	diff50 = s50-w50 # difference between seasonal medians 
+	maxDiff = s75 - w25 # difference between summer 75th and winter 25th percentiles (largest diffence)
+	minDiff = s25 - w75	# difference between summer 25th and winter 75th percentiles (smallest diffence)
+	
+	seasonalVelocitySubDict = {'winterDataNum':winterDataNum.tolist(),'summerDataNum':summerDataNum.tolist(),'winter25':w25.tolist(),'winter50':w50.tolist(),'winter75':w75.tolist(),'summer25':s25.tolist(),'summer50':s50.tolist(),'summer75':s75.tolist(),'medianDiff':diff50.tolist(),'maxDiff':maxDiff.tolist(),'minDiff':minDiff.tolist()}
+
+	return seasonalVelocitySubDict
+
+def calculateSeasonalSpeedup(seasonalVelocityDict,termDist):
+	'''
+	Calculate difference between summer and winter velocities
+	Inputs: seaonsalVelocityDict = output from splitSummerWinter()
+	Inputs: termDist = terminus distsance array
+	Outputs: speedupDictNow.viewkeys() = {'distTerm','distTermNorm','diffMedians','minDiff','maxDiff'}
+	Outputs: where 'distTerm' is 'flipped' distance (i.e., 0 at terminus), norm is normalized to glaceir length, min/median/max diff are the min/median/max difference between seasonal velocity median and IQR
+	'''	
+	# Parse data from input
+	winterSwathSpeeds = seasonalVelocityDict['winterSwathSpeeds']
+	summerSwathSpeeds = seasonalVelocityDict['summerSwathSpeeds']
+	summerRawSpeeds = seasonalVelocityDict['summerRawSpeeds']
+	winterRawSpeeds = seasonalVelocityDict['winterRawSpeeds']
+	winterTenpFilterSpeeds = seasonalVelocityDict['winterTempFilterSpeeds']
+	summerTenpFilterSpeeds = seasonalVelocityDict['summerTempFilterSpeeds']
+	winterCorr = seasonalVelocityDict['winterCorr']
+	summerCorr = seasonalVelocityDict['summerCorr']	
+	
+	# Initialize output
+	speedupDict = {}
+	transName = seasonalVelocityDict['transName']
+	speedupDict['transName']=transName
+	speedupDict['termDist']=termDist.tolist()
+	speedupDict['raw'] = seasonalSpeedupSubFunction(winterRawSpeeds,summerRawSpeeds)
+	speedupDict['swath'] = seasonalSpeedupSubFunction(winterSwathSpeeds,summerSwathSpeeds)
+	speedupDict['tempFilter'] = seasonalSpeedupSubFunction(winterTenpFilterSpeeds,summerTenpFilterSpeeds)
+	
+	return speedupDict
 
 
+# Make velocity matrix with len(time) rows and len(space) cols
+def makeVelocityMatrix(profile_data,key='speed'):
+	'''
+	Make a velocity matrix (len(space) cols and len(time) rows) from profile data
+	Inputs: profile_data = mark L8 sampler-like velocity dict
+	Inputs: key = 'speed' for raw veloity matrix or 'speedMeanClean' for swath-filtered matrix
+	Outputs: uMatx = velocity matrix with len(space) cols and len(time) rows
+	'''
+	
+	# Intalize matrix with the right lenght
+	uMatx = np.ones((1,len(profile_data['sample_pts_frontdist'])))*np.nan
+	nProfiles = len(profile_data['profiles'])
+	# iterate over profiles
+	for i in range(0,nProfiles):
+		profNow = profile_data['profiles'][i] # grab data
+		uNow = np.array(profNow[key]) # grab velocity
+		dDays = profNow['delts_days'] # time between images (not used)
+		uNow[uNow==-1] = np.nan # turn no-data to nan
+		uMatx = np.vstack((uMatx,uNow)) # append profile to velocity matrix
+
+	return uMatx
+
+# iterative removal of outliers by mean/stdev
+def removeOutliers(uMatx):
+	'''
+	Remove data if 'significantly' deviates from temporal mean velocity at that point. 'Signicant' means +/- 2 standard deviations by default.
+	Inputs: uMatx = velocity matrix output from makeVelocityMatrix()
+	Outputs: uMatxClean = velocity matrix with outliers turned to nans
+	'''
+	# Calculate temporal mean and standard deviation of velocity at each spatial location
+	meanAll = np.nanmean(uMatx,axis=0)
+	stdAll = np.nanstd(uMatx,axis=0)
+	uMatxClean = np.copy(uMatx)
+	# Tolerance for data to be kept. Default = within +/- 2 standard deviations
+	tol = 2*stdAll
+	
+	# Iterate over time slices
+	for rowNum in range(0,np.size(uMatx,0)):
+		# Find where data outside tolerance
+		ind = np.where(np.logical_or(uMatx[rowNum,:]<=meanAll-tol,uMatx[rowNum,:]>=meanAll+tol))
+		# Remove data outside tolerance
+		uMatxClean[rowNum,ind] = np.nan
+
+	return uMatxClean
+
+def iterativeRemoveOutliers(uMatx,iterNum=2):	
+	'''
+	Remove bad data by iterative calculation of temporal mean and standard deviation of velocity at a point.
+	Inputs: uMatx: velocity matrix with len(space) cols and len(time) rows.
+	Inputs: iterNum: number of times to calculate statistics and remove outliers
+	Ouputs: uOutDict: a dictionary with velocity matrices and profile statistics for each iteration
+	'''
+	iterVal = 0 # initializing iter count
+	uMatx = makeVelocityMatrix(profile_data) # velocity matrix with time rows, space cols
+	uOut = np.copy(uMatx) # this format for iterating
+	meanNow = np.nanmean(uOut,axis=0) # temporal mean velocity profile
+	stdNow = np.nanstd(uOut,axis=0) # standard deviation of temporal velocities
+
+	# Making dict for output
+	uDictOut  = {}
+	uDictOut['iter' + str(iterVal)] = {'velocityMatrix':uMatx,'velocityProfileMean':meanNow,'velocityProfileStdev':stdNow}
+
+	# Iterate specified number of times
+	while iterVal < iterNum:
+		iterVal += 1 # update iter count
+		uIn = np.copy(uOut) # copy output from last iteration (or raw data)
+		uOut = removeOutliers(uIn) # remove outliers based on difference from mean
+		# calculate mean and standard deviation of velocity after cleaning outliers
+		meanNow = np.nanmean(uOut,axis=0)
+		stdNow = np.nanstd(uOut,axis=0)
+		# Update output dict
+		uDictOut['iter' + str(iterVal)] = {'velocityMatrix':uOut,'velocityProfileMean':meanNow,'velocityProfileStdev':stdNow}
+
+	return uDictOut
+
+def putTempFiltDataBack(profile_data,uIterCleanMatx):
+	'''
+	Add temporally filtered velocity profiles back to L8 sampler-like dictionary 
+	Inputs: profile_data = mark l8 sampler-like velocity dict
+	Inputs: uIterCleanMatx = veliocity matrix (len(space) cols and len(time) rows) that has been temporally filtered. This is within the output from iterativeRemoveOutliers()
+	Outputs: profile_data = same as input but includes new 'speedTemporalFilter' key within each profile dict with temporally filtered velocity data
+	'''
+	nProfiles = len(profile_data['profiles']) # number of profiles
+	for i in range(1,nProfiles+1): # the 1 and +1 b/c first row of iterative temp filter u matrix is all nans
+		rawVelocities = profile_data['profiles'][i-1]['speed']
+		uTempFiltered = uIterCleanMatx[i,:]
+		profile_data['profiles'][i-1]['speedTemporalFilter']=uTempFiltered
+
+	return profile_data	
+
+def plotSeasonalVelocity(seasonalVelocityDict,speedupDict,termDist,plotToggle=1,saveToggle=0):
+	'''
+	Plot seasonal velocity profiles
+	Input: seasonalVelocityDict = output from splitSummerWinter()
+	Input: speedupDict = output from calculateSeasonalSpeedup()
+	Input: termDist = distance from terminus array
+	Output: seasonal velocity plot to screen or drive
+	'''
+	
+	transName = speedupDict['transName']
+	
+	# Plotting seasonal velocity with various levels of filtering
+	summerRaw = seasonalVelocityDict['summerRawSpeeds']
+	summerSwath = seasonalVelocityDict['summerSwathSpeeds']
+	summerTemp = seasonalVelocityDict['summerTempFilterSpeeds']
+	winterRaw = seasonalVelocityDict['winterRawSpeeds']
+	winterSwath = seasonalVelocityDict['winterSwathSpeeds']
+	winterTemp = seasonalVelocityDict['winterTempFilterSpeeds']
+
+	speedupTemp = speedupDict['tempFilter']
+
+	# Number of observations in each season
+	winterDataNum = np.sum(np.isfinite(winterTemp),axis=0)	
+	summerDataNum = np.sum(np.isfinite(summerTemp),axis=0)
+
+
+	winterCind = np.linspace(0.25, 1, len(winterRaw))
+	winterCols = plt.cm.GnBu(winterCind)
+	summerCind = np.linspace(0.25, 1, len(summerRaw))
+	summerCols = plt.cm.OrRd(summerCind)
+
+	# plot counts and velocity
+	fig = plt.figure()	
+	gs = gridspec.GridSpec(2,1,height_ratios=[1,4])
+		
+	ax0=plt.subplot(gs[0])
+	ax1=plt.subplot(gs[1])
+
+	ax0.plot(np.array(termDist)/1e3,winterDataNum,lw=2,c='cornflowerblue')
+	ax0.plot(np.array(termDist)/1e3,summerDataNum,lw=2,c='darkred')			
+	ax1.fill_between(np.array(termDist)/1e3,speedupTemp['summer25'],speedupTemp['summer75'],facecolor='salmon',color='darkred',alpha=0.5)					
+	ax1.fill_between(np.array(termDist)/1e3,speedupTemp['winter25'],speedupTemp['winter75'],facecolor='powderblue',color='cornflowerblue',alpha=0.5)		
+	
+	for i in range(0,len(summerRaw)):
+		rawNowSummer = summerRaw[i,:]
+		swathNowSummer = summerSwath[i,:]
+		tempNowSummer = summerTemp[i,:]
+
+		randInd = np.random.randint(0,len(summerRaw))	
+		ax1.scatter(np.array(termDist)/1e3,tempNowSummer,s=10,color=summerCols[randInd],lw=0,alpha=0.3)
+
+	for i in range(0,len(winterRaw)):
+
+		rawNowWinter = winterRaw[i,:]
+		swathNowWinter = winterSwath[i,:]
+		tempNowWinter = winterTemp[i,:]	
+	
+		randInd = np.random.randint(0,len(winterRaw))	
+
+		ax1.scatter(np.array(termDist)/1e3,tempNowWinter,s=10,color=winterCols[randInd],lw=0,alpha=0.3)
+
+
+
+		ax0.set_ylabel('Counts [-]')
+		ax0.set_title(transName + ' full auto',fontsize=20)
+		ax0.set_xlim((np.array(termDist)[0]/1e3,np.array(termDist)[-1]/1e3))
+		ax0.set_ylim((-1,20))
+		ax1.plot(np.array(termDist)/1e3,speedupTemp['winter50'],c='cornflowerblue',lw=2)	
+		ax1.plot(np.array(termDist)/1e3,speedupTemp['summer50'],c='darkred',lw=2)
+		ax1.set_xlim((np.array(termDist)[0]/1e3,np.array(termDist)[-1]/1e3))
+		maxSpeed = np.nanmax((np.nanmax(summerTemp),np.nanmax(summerTemp)))
+		ax1.set_xlabel('Distance from terminus [km]')
+		ax1.set_ylabel('Velocity [m d$^{-1}$]')		
+		ax1.set_ylim((-0.05,np.nanmin((1.75,maxSpeed))))
+
+		#if saveToggle == 1: # if want to save	
+		fig.savefig(transName + '_justCountsAndVelocity_fullyAutomated.pdf')
+
+def plotSeasonalSpeedup(speedupDict,termDist,plotToggle=1,saveToggle=0):
+	'''
+	Plot seasonal speedup profiles
+	Input: speedupDict = output from calculateSeasonalSpeedup()
+	Input: termDist = distance from terminus array
+	Output: seasonal velocity plot to screen or drive
+	'''
+	
+	transName = speedupDict['transName']
+	
+	speedupTemp = speedupDict['tempFilter']
+	maxDiff = speedupTemp['maxDiff']
+	minDiff = speedupTemp['minDiff']
+	medianDiff = speedupTemp['medianDiff']
+			
+	# Number of observations in each season
+	winterDataNum = speedupTemp['winterDataNum']
+	summerDataNum = speedupTemp['summerDataNum']
+	
+	# plot counts and velocity
+	fig = plt.figure()	
+	gs = gridspec.GridSpec(2,1,height_ratios=[1,4])
+		
+	ax0=plt.subplot(gs[0])
+	ax1=plt.subplot(gs[1])
+
+	ax0.plot(np.array(termDist)/1e3,winterDataNum,lw=2,c='cornflowerblue')
+	ax0.plot(np.array(termDist)/1e3,summerDataNum,lw=2,c='darkred')			
+
+	ax0.set_ylabel('Counts [-]')
+	ax0.set_title(transName + ' full auto',fontsize=20)
+	ax0.set_xlim((np.array(termDist)[0]/1e3,np.array(termDist)[-1]/1e3))
+	ax0.set_ylim((-1,20))
+
+	ax1.fill_between(np.array(termDist)/1e3,minDiff,maxDiff,facecolor='powderblue',color='cornflowerblue',alpha=0.5)		
+	ax1.plot(np.array(termDist)/1e3,medianDiff,c='darkred',lw=2)	
+	ax1.plot((np.array(np.min(termDist))/1e3,np.array(np.max(termDist))/1e3),((0,0)),c='k',ls='--',lw=1)	
+	
+	ax1.set_xlim((np.array(termDist)[0]/1e3,np.array(termDist)[-1]/1e3))
+#	maxSpeed = np.nanmax((np.nanmax(summerTemp),np.nanmax(summerTemp)))
+	ax1.set_xlabel('Distance from terminus [km]')
+	ax1.set_ylabel('Velocity [m d$^{-1}$]')		
+	ax1.set_ylim((-.5,.5))
+
+	#if saveToggle == 1: # if want to save	
+	fig.savefig(transName + '_justCountsAndSpeedup_fullyAutomated.pdf')
+
+
+
+def smooth(x,window_len=11,window='hanning'):
+    """smooth the data using a window with requested size.
+
+    This method is based on the convolution of a scaled window with the signal.
+    The signal is prepared by introducing reflected copies of the signal
+    (with the window size) in both ends so that transient parts are minimized
+    in the begining and end part of the output signal.
+
+    input:
+        x: the input signal
+        window_len: the dimension of the smoothing window; should be an odd integer
+        window: the type of window from 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'
+            flat window will produce a moving average smoothing.
+
+    output:
+        the smoothed signal
+
+    example:
+
+    t=linspace(-2,2,0.1)
+    x=sin(t)+randn(len(t))*0.1
+    y=smooth(x)
+
+    see also:
+
+    numpy.hanning, numpy.hamming, numpy.bartlett, numpy.blackman, numpy.convolve
+    scipy.signal.lfilter
+
+    TODO: the window parameter could be the window itself if an array instead of a string
+    NOTE: length(output) != length(input), to correct this: return y[(window_len/2-1):-(window_len/2)] instead of just y.
+    """
+
+    if x.ndim != 1:
+        raise ValueError, "smooth only accepts 1 dimension arrays."
+
+    if x.size < window_len:
+        raise ValueError, "Input vector needs to be bigger than window size."
+
+
+    if window_len<3:
+        return x
+
+
+    if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
+        raise ValueError, "Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'"
+
+
+    s=np.r_[x[window_len-1:0:-1],x,x[-1:-window_len:-1]]
+    #print(len(s))
+    if window == 'flat': #moving average
+        w=np.ones(window_len,'d')
+    else:
+        w=eval('np.'+window+'(window_len)')
+
+    y=np.convolve(w/w.sum(),s,mode='valid')
+    return y[(window_len/2-0):-(window_len/2)]
+
+
+def decYearToDoy(decYear):
+	'''
+	Turn a decimal year date into DOY
+	Not exactly correct, doesn't treat leap years, but good enough
+	'''
+	
+	doy = (decYear-np.floor(decYear)) * 365
+	
+	return doy
 
 
 
